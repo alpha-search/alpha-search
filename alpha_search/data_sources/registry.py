@@ -60,7 +60,7 @@ def _try_import(class_path: str):
 _SOURCE_CLASSES: Dict[str, str] = {
     # -- stocks (8) ---------------------------------------------------------
     "yfinance": "alpha_search.data_sources.yfinance_source.YFinanceSource",
-    "alpha_vantage": "alpha_search.data_sources.alpha_vantage.AlphaVantageSource",
+    "alpha_vantage": "alpha_search.data_sources.providers.alpha_vantage.AlphaVantageSource",
     "eodhd": "alpha_search.data_sources.eodhd.EODHDSource",
     "fmp": "alpha_search.data_sources.fmp.FMPSource",
     "tiingo": "alpha_search.data_sources.tiingo.TiingoSource",

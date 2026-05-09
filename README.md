@@ -2,12 +2,15 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)]()
-[![PyPI](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)]()
+[![CI](https://github.com/alpha-search/alpha-search/actions/workflows/ci.yml/badge.svg)](https://github.com/alpha-search/alpha-search/actions)
+[![Deploy](https://github.com/alpha-search/alpha-search/actions/workflows/deploy.yml/badge.svg)](https://github.com/alpha-search/alpha-search/actions)
+[![Open In Colab](https://colab.research.google.com/assets/colab_badge.svg)](https://colab.research.google.com/github/alpha-search/alpha-search/blob/main/notebooks/Alpha_Search_Demo.ipynb)
 
 **The Agent-Powered Quantitative Research Framework**
 
-> **Note:** Previously developed internally as Quant.OS. Rebranded to Alpha Search before public launch to avoid namespace confusion and improve product clarity.
+> **Version 0.2.1** — Data Platform with 37 sources, Agent Swarm collaboration, and Persistent Memory
+>
+> Previously developed internally as Quant.OS. Rebranded to Alpha Search before public launch.
 
 ---
 
@@ -22,6 +25,14 @@ At its core, Alpha Search treats quantitative research as a directed pipeline: *
 ---
 
 ## Quick Start
+
+### Option 1: Google Colab (Fastest — No Installation)
+
+[![Open In Colab](https://colab.research.google.com/assets/colab_badge.svg)](https://colab.research.google.com/github/alpha-search/alpha-search/blob/main/notebooks/Alpha_Search_Demo.ipynb)
+
+Run the full pipeline in your browser with one click.
+
+### Option 2: Local Installation
 
 ```bash
 pip install alpha-search          # or pip install "alpha-search[all]"
@@ -115,22 +126,165 @@ The Global Market Opportunity Agent is provided for **research and educational p
 
 ---
 
+## Try It in Google Colab
+
+Launch the full Alpha Search pipeline in your browser — no installation required:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab_badge.svg)](https://colab.research.google.com/github/alpha-search/alpha-search/blob/main/notebooks/Alpha_Search_Demo.ipynb)
+
+The notebook demonstrates:
+- Fetching real market data for US Top 20 equities
+- Running all 3 strategy backtests (momentum, mean reversion, arbitrage)
+- Launching the 5-agent swarm with critique loops
+- Viewing agent critiques, consensus, and sign-offs
+- Visualizing performance and correlation matrices
+- Saving results to persistent memory
+
+---
+
+## Data Source Platform (37 Sources)
+
+Alpha Search is designed as an **open data source platform** where researchers can discover, register, and use financial data sources through a unified interface. The platform currently includes **37 data sources** across **7 categories**:
+
+| Category | Sources | Live |
+|----------|---------|------|
+| **Stocks** | Yahoo Finance, Alpha Vantage, Polygon.io, FMP, Tiingo, EODHD, Twelve Data | 3 |
+| **Crypto** | CoinGecko, Binance, CryptoCompare, Messari, Glassnode, CoinMarketCap | 2 |
+| **Forex** | OANDA, Forex Python | 0 |
+| **Macro** | FRED, World Bank, IMF, OECD, Trading Economics | 1 |
+| **News & Sentiment** | NewsAPI, Finnhub News, Reddit API, Twitter/X API, GDELT | 0 |
+| **Fundamentals** | SEC EDGAR, SimFin, OpenFIGI, Nasdaq Data Link | 1 |
+| **Alternative** | Open-Meteo, GitHub Activity, AltStack, Bursa Malaysia, NSE India | 1 |
+
+### Using the Data Source Platform
+
+```python
+from alpha_search.data_sources import registry
+
+# See what's available
+print(f"Total sources: {registry.count()}")
+print(f"Live now: {registry.count_live()}")
+print(f"Available without API key: {len([s for s in registry.list_available() if not s.requires_api_key])}")
+
+# Browse by category
+for meta in registry.list_by_category("macro"):
+    print(f"  {meta.name}: {meta.description}")
+
+# Use a source
+fred = registry.get("fred")
+df = fred.fetch_macro("GDP")  # US GDP time series
+```
+
+### Activating Sources
+
+Some sources require an API key:
+
+| Source | Environment Variable | Free Tier |
+|--------|---------------------|-----------|
+| Alpha Vantage | `ALPHA_VANTAGE_API_KEY` | 25 calls/day |
+| Polygon.io | `POLYGON_API_KEY` | 5 calls/min |
+| FRED | `FRED_API_KEY` (optional) | 120 calls/min |
+| CoinGecko | `COINGECKO_API_KEY` (optional) | 10-30 calls/min |
+| SEC EDGAR | `SEC_USER_AGENT` | Unlimited |
+
+---
+
+## Agent Swarm Collaboration
+
+Alpha Search includes a **multi-agent collaboration system** where 5 specialized agents work together, critique each other's outputs, and build consensus on strategy recommendations:
+
+| Agent | Role |
+|-------|------|
+| **DataEngineerAgent** | Validates data quality, flags missing data and suspicious jumps |
+| **OpportunityAgent** | Ranks candidates by momentum, mean reversion, and arbitrage signals |
+| **QuantEngineerAgent** | Builds and backtests signals with transaction costs |
+| **ResearchAgent** | Provides sentiment analysis and research context |
+| **RiskManagerAgent** | Reviews strategies against drawdown and position limits |
+
+### The Critique Loop
+
+Agents don't just produce outputs — they **critique each other** in two rounds:
+
+1. **Round 1**: Every agent reviews every other agent's work and issues structured critiques (data quality, signal quality, risk concerns, improvements)
+2. **Improvement**: Agents incorporate feedback and revise their strategies
+3. **Round 2**: All agents review the updated strategies
+4. **Consensus**: Final recommendation with agent sign-offs
+
+```python
+from alpha_search.agents.swarm import AgentSwarm
+from alpha_search.agents.roles import (
+    DataEngineerAgent, QuantEngineerAgent, RiskManagerAgent,
+    ResearchAgent, OpportunityAgent,
+)
+
+# Set up the swarm
+swarm = AgentSwarm()
+swarm.register("data_engineer", DataEngineerAgent())
+swarm.register("opportunity_agent", OpportunityAgent())
+swarm.register("quant_engineer", QuantEngineerAgent(cost_model))
+swarm.register("research_agent", ResearchAgent())
+swarm.register("risk_manager", RiskManagerAgent())
+
+# Run full collaboration with critique loops
+result = swarm.run_collaboration(tickers=us_top_20, prices=price_data)
+
+# View critiques
+for c in result["critiques"]:
+    print(f"{c['from_agent']} → {c['to_agent']}: {c['message']}")
+
+# View consensus
+print(result["consensus"])
+```
+
+---
+
+## Persistent Memory Layer
+
+Alpha Search includes a **dual-write persistent memory system** that stores agent activity, critiques, strategies, and decisions across sessions using DuckDB (with SQLite fallback):
+
+```python
+from alpha_search.memory.store import MemoryStore
+from alpha_search.memory.journal import AgentJournal
+
+# Create memory store (DuckDB with automatic SQLite fallback)
+store = MemoryStore(db_path="./alpha_memory.db")
+journal = AgentJournal(store)
+
+# Log agent activity
+journal.log_critique(critique_message)
+journal.log_strategy("momentum_v2", "quant_engineer", strategy_dict)
+journal.log_event("round_complete", "swarm", {"round": 1})
+
+# Query memory
+from alpha_search.memory.retrieval import MemoryRetriever
+retriever = MemoryRetriever(store)
+records = retriever.query(record_type="critique", limit=50)
+```
+
+---
+
 ## Architecture
 
 ```
 alpha_search/
 ├── core/              # Pydantic models, base classes, config, exceptions
 ├── data/              # Multi-source providers (Yahoo Finance, Binance), DuckDB cache, normalizer
+├── data_sources/      # Data Source Platform — 37 sources across 7 categories (plugin architecture)
 ├── signals/           # Technical (momentum, RSI, Bollinger), fundamental, ensemble signals
 ├── backtest/          # Vectorized engine, performance metrics, walk-forward validation
 ├── sentiment/         # FinBERT NLP, NewsAPI, social-media aggregation, composite scoring
 ├── portfolio/         # Construction, mean-variance optimization, risk metrics (VaR, CVaR)
 ├── execution/         # Paper-trading simulation, broker adapter stubs, pre-trade risk controls
 ├── opportunities/     # Global multi-asset opportunity discovery (momentum, mean reversion, arbitrage)
+├── agents/            # Multi-agent swarm collaboration framework with critique loops
+├── memory/            # Persistent memory — DuckDB + Markdown dual-write for agent activity
+├── research/          # Real data pipeline, report writer, universes, metrics
 ├── api/               # FastAPI REST endpoints for headless / programmatic access
 ├── ui/                # Streamlit interactive dashboard with Plotly visualizations
 └── terminal.py        # Main facade — wire everything together in 5 lines of Python
 ```
+
+![Alpha Search Pipeline](docs/alpha_search_pipeline.png)
 
 ---
 
@@ -144,12 +298,15 @@ alpha_search/
 
 | Feature | OpenBB | Alpha Search |
 |---------|--------|----------|
-| Data aggregation | 100+ sources | Yahoo Finance, Binance, DuckDB local cache |
+| Data aggregation | 100+ sources | **37 sources** across 7 categories (8 live now) |
+| Data source platform | Terminal plugins | **Plugin architecture with unified ABC interface** |
 | Sentiment analysis | — | FinBERT, NewsAPI, social media, composite scoring |
 | Backtesting | — | Vectorized engine with PnL, Sharpe, drawdown metrics |
 | Walk-forward validation | — | Rolling train / test splits, out-of-sample testing |
 | Portfolio optimization | — | Mean-variance, risk-parity, CVaR constraints |
 | Paper trading | — | Simulated execution with slippage and risk controls |
+| **Agent swarm** | — | **5 agents with 2-round critique loops & consensus** |
+| **Persistent memory** | — | **DuckDB + Markdown dual-write across sessions** |
 | Terminal UI | OpenBB Terminal | Streamlit + Plotly interactive dashboard |
 | REST API | — | FastAPI endpoints for programmatic access |
 | License | AGPL-3.0 | MIT |
@@ -166,12 +323,16 @@ OpenBB ships under **AGPL-3.0**, a strong copyleft license that can create frict
 |--------|---------|
 | `alpha_search.core` | Shared Pydantic models, configuration, and custom exceptions |
 | `alpha_search.data` | Multi-asset data ingestion (equities, crypto) with DuckDB caching |
+| `alpha_search.data_sources` | **Data Source Platform** — 37 sources, plugin architecture, unified interface |
 | `alpha_search.signals` | Technical indicators, cross-sectional signals, and ensemble builders |
 | `alpha_search.backtest` | Fast, vectorized backtest engine with performance analytics |
 | `alpha_search.sentiment` | NLP-driven sentiment from news, social media, and financial text |
 | `alpha_search.portfolio` | Construction, mean-variance optimization, and risk attribution |
 | `alpha_search.execution` | Paper-trading simulation with realistic slippage and risk checks |
 | `alpha_search.opportunities` | Global multi-asset opportunity discovery — US equities, Indian equities, crypto, FX, commodities |
+| `alpha_search.agents` | **Agent Swarm** — 5-agent collaboration with structured critique loops |
+| `alpha_search.memory` | **Persistent Memory** — DuckDB + Markdown dual-write across sessions |
+| `alpha_search.research` | Real data pipeline, report writer, market universes, metrics |
 | `alpha_search.api` | FastAPI REST layer for headless deployment and micro-service integration |
 | `alpha_search.ui` | Streamlit dashboard for visual exploration and real-time monitoring |
 
