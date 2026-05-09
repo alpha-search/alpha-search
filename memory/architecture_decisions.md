@@ -100,3 +100,14 @@ Tags: database, local-first, duckdb, data
 Tags: backtesting, performance
 ---
 
+### [2026-05-09 02:47:29 UTC] Research Pipeline
+
+**Decision:** Completed 3-strategy research pipeline at 2026-05-09T02:47:29.628557+00:00
+
+**Rationale:** All pipelines executed. Results stored in reports/ directory.
+
+**Importance:** 0.8/1.0
+
+Tags: research, pipeline, strategy
+---
+

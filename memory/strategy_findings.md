@@ -53,3 +53,60 @@ for the risk appetite of the target portfolio.
 
 ---
 
+### [2026-05-09 02:47:29 UTC] Momentum Strategy
+
+**Verdict:** ❌ rejected
+**Type:** momentum | **Market:** Global (US, India, Crypto) | **Asset:** multi_asset
+
+**Hypothesis:** Stocks with strong recent price momentum will continue trending in the same direction over the next 1–4 weeks.
+**Result Summary:** Average return: 3.50%, Sharpe: 0.02, Max DD: 10.62%
+
+**Metrics:**
+- sharpe: 0.0249
+- max_drawdown: 10.62%
+- total_return: 0.0350
+
+**Rejection Reason:** Average Sharpe too low (0.02) for live deployment.
+
+**Lessons Learned:** Synthetic data results. Need validation on real data before any deployment.
+
+---
+
+### [2026-05-09 02:47:29 UTC] Mean Reversion Strategy
+
+**Verdict:** ❌ rejected
+**Type:** mean_reversion | **Market:** Global (US, India, Crypto) | **Asset:** multi_asset
+
+**Hypothesis:** Stocks that deviate significantly from their rolling mean will revert toward the mean over the short term.
+**Result Summary:** Average return: -10.07%, Sharpe: -1.51, Max DD: 13.89%
+
+**Metrics:**
+- sharpe: -1.5087
+- max_drawdown: 13.89%
+- total_return: -0.1007
+
+**Rejection Reason:** Average Sharpe too low (-1.51) for live deployment.
+
+**Lessons Learned:** Synthetic data results. Need validation on real data before any deployment.
+
+---
+
+### [2026-05-09 02:47:29 UTC] Arbitrage Strategy
+
+**Verdict:** ❌ rejected
+**Type:** arbitrage | **Market:** Global (US, India, Crypto) | **Asset:** multi_asset
+
+**Hypothesis:** Cointegrated / highly-correlated pairs will maintain a stationary spread, allowing profitable mean-reversion trades when the spread deviates from its equilibrium.
+**Result Summary:** Average return: 0.15%, Sharpe: -0.11, Max DD: 12.48%
+
+**Metrics:**
+- sharpe: -0.1111
+- max_drawdown: 12.48%
+- total_return: 0.0015
+
+**Rejection Reason:** Average Sharpe too low (-0.11) for live deployment.
+
+**Lessons Learned:** Synthetic data results. Need validation on real data before any deployment.
+
+---
+
