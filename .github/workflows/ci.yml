@@ -53,7 +53,8 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/ --tb=short -q 2>&1
+          python -m pytest tests/ -x -v --tb=short 2>&1 | tee pytest-output.txt
+          exit ${PIPESTATUS[0]}
 
   build:
     name: Build package
