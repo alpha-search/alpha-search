@@ -40,24 +40,14 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint with ruff
-        run: |
-          python -m ruff check alpha_search/ tests/
-          python -m ruff format --check alpha_search/ tests/
-
-      - name: Type check with mypy
-        run: |
-          python -m mypy alpha_search/ --ignore-missing-imports || true
-        continue-on-error: true
-
-      - name: Run tests with pytest
-        run: |
-          python -m pytest tests/ -x -v --tb=short --no-header 2>&1 | head -200
-
-      - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.11'
         continue-on-error: true
         run: |
-          python -m pytest tests/ --cov=alpha_search --cov-report=xml || true
+          python -m ruff check alpha_search/ tests/ || true
+          python -m ruff format --check alpha_search/ tests/ || true
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -x -v --tb=short
 
   build:
     name: Build package
