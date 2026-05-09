@@ -38,7 +38,9 @@ logger = logging.getLogger(__name__)
 def _import_binance_provider() -> Optional[Any]:
     """Try to import the project's BinanceProvider, returning ``None`` on failure."""
     try:
-        from alpha_search.data.binance_provider import BinanceProvider  # type: ignore[import-untyped]
+        from alpha_search.data.binance_provider import (
+            BinanceProvider,  # type: ignore[import-untyped]
+        )
         return BinanceProvider
     except ImportError:
         return None
@@ -193,7 +195,6 @@ class BinanceSource(DataSource):
                 f"{self.meta.install_cmd}"
             )
 
-        import requests
 
         # Convert interval to Binance format
         interval_map = {

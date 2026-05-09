@@ -11,11 +11,10 @@ All tickers are compatible with Yahoo Finance (``yfinance``).
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-
 
 # ---------------------------------------------------------------------------
 # NIFTY 50 — Indian equities (Yahoo Finance format with .NS suffix)

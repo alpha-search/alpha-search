@@ -198,8 +198,8 @@ def momentum_scan(
             continue
 
         # Multi-period returns
-        r5 = _returns(prices, 5)
-        r10 = _returns(prices, 10)
+        _ = _returns(prices, 5)  # noqa: F841
+        _ = _returns(prices, 10)  # noqa: F841
         r20 = _returns(prices, 20)
 
         # RSI

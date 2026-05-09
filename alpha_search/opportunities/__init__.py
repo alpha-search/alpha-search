@@ -13,9 +13,9 @@ Indian equities, cryptocurrencies, forex pairs, and commodities.
 """
 
 from alpha_search.opportunities.models import PairOpportunity, StockOpportunity
-from alpha_search.opportunities.scoring import FinalScore
 from alpha_search.opportunities.scanner import StockOpportunityScanner
-from alpha_search.opportunities.strategies import momentum_scan, mean_reversion_scan, arbitrage_scan
+from alpha_search.opportunities.scoring import FinalScore
+from alpha_search.opportunities.strategies import arbitrage_scan, mean_reversion_scan, momentum_scan
 
 __all__ = [
     "StockOpportunity", "PairOpportunity", "FinalScore",

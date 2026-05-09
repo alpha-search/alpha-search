@@ -292,7 +292,7 @@ class NewsAPISource(DataSource):
 
         # Try TextBlob
         try:
-            from textblob import TextBlob  # type: ignore[import-untyped]
+            from textblob import TextBlob  # type: ignore[import-untyped]  # noqa: F401
             return self._textblob_sentiment(articles)
         except ImportError:
             logger.debug("TextBlob not installed; using keyword heuristic")

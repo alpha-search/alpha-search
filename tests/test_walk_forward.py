@@ -7,7 +7,6 @@ import pytest
 from alpha_search.backtest.walk_forward import WalkForwardValidator
 from alpha_search.signals import ma_crossover
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

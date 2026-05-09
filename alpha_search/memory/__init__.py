@@ -14,15 +14,15 @@ Modules:
 
 from __future__ import annotations
 
+from alpha_search.memory.journal import AgentJournal
 from alpha_search.memory.models import (
     HandoffRecord,
     MemoryRecord,
     RiskDecision,
     StrategyMemory,
 )
-from alpha_search.memory.store import MemoryStore
-from alpha_search.memory.journal import AgentJournal
 from alpha_search.memory.retrieval import MemoryRetriever
+from alpha_search.memory.store import MemoryStore
 
 __all__ = [
     "MemoryRecord",

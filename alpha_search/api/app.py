@@ -8,12 +8,11 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from alpha_search.backtest.costs import CostModel
 from alpha_search.backtest.engine import BacktestEngine
-from alpha_search.backtest.metrics import Metrics
 from alpha_search.data.providers import ProviderRegistry
 
 logger = logging.getLogger(__name__)

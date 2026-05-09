@@ -23,48 +23,41 @@ from __future__ import annotations
 
 import logging
 import os
-import warnings
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
-import numpy as np
 import pandas as pd
-
-# -- Real Data Pipeline imports ------------------------------------------------
-from alpha_search.research.real_data_pipeline import (
-    US_TOP20,
-    INDIA_TOP20,
-    COST_MODEL,
-    INITIAL_CAPITAL,
-    fetch_real_data,
-    run_sentiment_analysis,
-    run_momentum_strategy,
-    run_mean_reversion_strategy,
-    run_arbitrage_strategy,
-    build_portfolio,
-    log_results_to_memory,
-    _get_close_prices,
-    _safe_backtest_summary,
-)
 
 # -- Agent Swarm imports -------------------------------------------------------
 from alpha_search.agents import (
     AgentSwarm,
-    CritiqueMessage,
     DataEngineerAgent,
-    QuantEngineerAgent,
-    RiskManagerAgent,
-    ResearchAgent,
     OpportunityAgent,
+    QuantEngineerAgent,
+    ResearchAgent,
+    RiskManagerAgent,
+)
+
+# -- Memory layer --------------------------------------------------------------
+from alpha_search.memory import AgentJournal, MemoryStore
+from alpha_search.memory.models import StrategyMemory
+from alpha_search.research.agent_report import AgentSwarmReportGenerator
+
+# -- Real Data Pipeline imports ------------------------------------------------
+from alpha_search.research.real_data_pipeline import (
+    COST_MODEL,
+    INDIA_TOP20,
+    US_TOP20,
+    build_portfolio,
+    fetch_real_data,
+    run_arbitrage_strategy,
+    run_mean_reversion_strategy,
+    run_momentum_strategy,
+    run_sentiment_analysis,
 )
 
 # -- Report generators ---------------------------------------------------------
 from alpha_search.research.strategy_report import StrategyReportGenerator
-from alpha_search.research.agent_report import AgentSwarmReportGenerator
-
-# -- Memory layer --------------------------------------------------------------
-from alpha_search.memory import MemoryStore, AgentJournal
-from alpha_search.memory.models import StrategyMemory, MemoryRecord
 
 logger = logging.getLogger("alpha_search.swarm_pipeline")
 
@@ -432,7 +425,7 @@ def print_combined_summary(
     # Data
     us_data = pipeline.get("us_data", {})
     india_data = pipeline.get("india_data", {})
-    print(f"\n   --- DATA FETCHING ---")
+    print("\n   --- DATA FETCHING ---")
     print(f"   US tickers:    {us_data.get('tickers_fetched', 0)}/{us_data.get('tickers_requested', 0)} fetched")
     print(f"   India tickers: {india_data.get('tickers_fetched', 0)}/{india_data.get('tickers_requested', 0)} fetched")
 
@@ -442,7 +435,7 @@ def print_combined_summary(
         avg_score = sum(s.get("score", 0) for s in sentiment.values()) / max(len(sentiment), 1)
         most_bullish = max(sentiment.items(), key=lambda x: x[1].get("score", 0))
         most_bearish = min(sentiment.items(), key=lambda x: x[1].get("score", 0))
-        print(f"\n   --- SENTIMENT (FinBERT) ---")
+        print("\n   --- SENTIMENT (FinBERT) ---")
         print(f"   Tickers analysed: {len(sentiment)}")
         print(f"   Average score:    {avg_score:+.3f}")
         print(f"   Most bullish:     {most_bullish[0]} ({most_bullish[1].get('score', 0):+.3f})")
@@ -466,7 +459,7 @@ def print_combined_summary(
             print(f"   Avg Return: {avg_return:+.2%}")
             print(f"   Avg Max DD: {avg_dd:.2%}")
         else:
-            print(f"   No backtest metrics available")
+            print("   No backtest metrics available")
 
         if top_picks:
             print(f"   Top picks:  {', '.join(top_picks[:5])}")
@@ -474,7 +467,7 @@ def print_combined_summary(
     # Pipeline portfolio
     portfolio = pipeline.get("portfolio", {})
     if portfolio and portfolio.get("allocations"):
-        print(f"\n   --- PIPELINE: PORTFOLIO ---")
+        print("\n   --- PIPELINE: PORTFOLIO ---")
         for method_name, weights in portfolio["allocations"].items():
             weight_str = ", ".join(f"{k}={v:.1%}" for k, v in weights.items())
             print(f"   {method_name:15s}: {weight_str}")
@@ -487,7 +480,7 @@ def print_combined_summary(
     consensus = swarm.get("consensus", "")
     strategies = swarm.get("strategies", [])
 
-    print(f"\n   --- AGENT SWARM COLLABORATION ---")
+    print("\n   --- AGENT SWARM COLLABORATION ---")
     print(f"   Run ID:       {run_id}")
     print(f"   Strategies:   {len(strategies)}")
     print(f"   Critiques:    {len(critiques)}")
@@ -503,7 +496,7 @@ def print_combined_summary(
     # Consensus preview
     if consensus:
         consensus_lines = consensus.splitlines()
-        print(f"\n   --- CONSENSUS ---")
+        print("\n   --- CONSENSUS ---")
         for line in consensus_lines[:15]:
             print(f"   {line}")
         if len(consensus_lines) > 15:
@@ -511,13 +504,13 @@ def print_combined_summary(
 
     # ---- Reports ---------------------------------------------------------
     reports = results.get("reports", {})
-    print(f"\n   --- REPORTS ---")
+    print("\n   --- REPORTS ---")
     for report_name, report_path in reports.items():
         if report_path:
             print(f"   {report_name:20s}: {report_path}")
 
     # Memory
-    print(f"\n   --- MEMORY ---")
+    print("\n   --- MEMORY ---")
     print(f"   Logged to persistent memory: {results.get('memory_logged', False)}")
 
     print("\n" + "=" * 72)

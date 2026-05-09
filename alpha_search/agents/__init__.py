@@ -13,14 +13,14 @@ Quick start
 >>> result = swarm.run_collaboration(tickers, prices)
 """
 
-from alpha_search.agents.swarm import AgentSwarm, CritiqueMessage
 from alpha_search.agents.roles import (
     DataEngineerAgent,
-    QuantEngineerAgent,
-    RiskManagerAgent,
-    ResearchAgent,
     OpportunityAgent,
+    QuantEngineerAgent,
+    ResearchAgent,
+    RiskManagerAgent,
 )
+from alpha_search.agents.swarm import AgentSwarm, CritiqueMessage
 
 __all__ = [
     "AgentSwarm",

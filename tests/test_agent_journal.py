@@ -13,11 +13,9 @@ import pytest
 
 from alpha_search.memory import (
     AgentJournal,
-    MemoryRecord,
     MemoryStore,
     StrategyMemory,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

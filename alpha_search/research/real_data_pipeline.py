@@ -22,37 +22,27 @@ from __future__ import annotations
 
 import logging
 import os
-import warnings
 from datetime import datetime, timedelta, timezone
-from itertools import combinations
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from alpha_search.data.yfinance_provider import YFinanceProvider
-from alpha_search.data.providers import ProviderRegistry
-from alpha_search.sentiment.finbert import FinBERTSentimentAnalyzer
-from alpha_search.signals.technical import (
-    momentum,
-    ma_crossover,
-    z_score_mean_reversion,
-    rsi,
-    bollinger_band_position,
-)
-from alpha_search.backtest.engine import BacktestEngine
 from alpha_search.backtest.costs import CostModel
-from alpha_search.backtest.metrics import Metrics
-from alpha_search.portfolio.construction import Portfolio
-from alpha_search.opportunities.market_universes import SP500_TICKERS, NIFTY50_TICKERS
-from alpha_search.opportunities.scanner import StockOpportunityScanner
+from alpha_search.backtest.engine import BacktestEngine
+from alpha_search.data.yfinance_provider import YFinanceProvider
+from alpha_search.memory import AgentJournal, MemoryStore
+from alpha_search.memory.models import StrategyMemory
 from alpha_search.opportunities.strategies import (
-    momentum_scan,
-    mean_reversion_scan,
     arbitrage_scan,
 )
-from alpha_search.memory import MemoryStore, AgentJournal
-from alpha_search.memory.models import StrategyMemory, MemoryRecord
+from alpha_search.sentiment.finbert import FinBERTSentimentAnalyzer
+from alpha_search.signals.technical import (
+    bollinger_band_position,
+    ma_crossover,
+    momentum,
+    z_score_mean_reversion,
+)
 
 logger = logging.getLogger("alpha_search.real_pipeline")
 
@@ -577,7 +567,7 @@ def run_arbitrage_strategy(
 
             # Build minimal BacktestResult manually
             cumulative = (1.0 + strategy_returns).cumprod()
-            equity = INITIAL_CAPITAL * cumulative
+            _ = INITIAL_CAPITAL * cumulative  # noqa: F841  # noqa: F841
 
             prices_df = spread.to_frame("Close")
             result = engine.run(
@@ -1038,7 +1028,7 @@ def print_summary(
     # Data
     us_data = results.get("us_data", {})
     india_data = results.get("india_data", {})
-    print(f"\n   --- DATA FETCHING ---")
+    print("\n   --- DATA FETCHING ---")
     print(f"   US tickers:    {us_data.get('tickers_fetched', 0)}/{us_data.get('tickers_requested', 0)} fetched")
     print(f"   India tickers: {india_data.get('tickers_fetched', 0)}/{india_data.get('tickers_requested', 0)} fetched")
 
@@ -1048,7 +1038,7 @@ def print_summary(
         avg_score = sum(s.get("score", 0) for s in sentiment.values()) / max(len(sentiment), 1)
         most_bullish = max(sentiment.items(), key=lambda x: x[1].get("score", 0))
         most_bearish = min(sentiment.items(), key=lambda x: x[1].get("score", 0))
-        print(f"\n   --- SENTIMENT (FinBERT) ---")
+        print("\n   --- SENTIMENT (FinBERT) ---")
         print(f"   Tickers analysed: {len(sentiment)}")
         print(f"   Average score:    {avg_score:+.3f}")
         print(f"   Most bullish:     {most_bullish[0]} ({most_bullish[1].get('score', 0):+.3f})")
@@ -1072,7 +1062,7 @@ def print_summary(
             print(f"   Avg Return: {avg_return:+.2%}")
             print(f"   Avg Max DD: {avg_dd:.2%}")
         else:
-            print(f"   No backtest metrics available")
+            print("   No backtest metrics available")
 
         if top_picks:
             print(f"   Top picks:  {', '.join(top_picks[:5])}")
@@ -1080,12 +1070,12 @@ def print_summary(
     # Portfolio
     portfolio = results.get("portfolio", {})
     if portfolio and portfolio.get("allocations"):
-        print(f"\n   --- PORTFOLIO ALLOCATION ---")
+        print("\n   --- PORTFOLIO ALLOCATION ---")
         for method_name, weights in portfolio["allocations"].items():
             weight_str = ", ".join(f"{k}={v:.1%}" for k, v in weights.items())
             print(f"   {method_name:15s}: {weight_str}")
 
-        print(f"\n   --- PORTFOLIO RISK METRICS ---")
+        print("\n   --- PORTFOLIO RISK METRICS ---")
         for method_name, risk in portfolio.get("risk_metrics", {}).items():
             print(
                 f"   {method_name:15s}: Return={risk.get('expected_return', 0):.2%}  "
@@ -1094,7 +1084,7 @@ def print_summary(
             )
 
     # Memory
-    print(f"\n   --- MEMORY ---")
+    print("\n   --- MEMORY ---")
     print(f"   Logged to persistent memory: {results.get('memory_logged', False)}")
 
     report_path = results.get("report_path")

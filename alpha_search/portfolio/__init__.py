@@ -2,12 +2,12 @@
 
 from alpha_search.portfolio.construction import Portfolio
 from alpha_search.portfolio.risk import (
-    portfolio_volatility,
-    value_at_risk,
-    conditional_var,
     beta,
-    tracking_error,
+    conditional_var,
     information_ratio,
+    portfolio_volatility,
+    tracking_error,
+    value_at_risk,
 )
 
 __all__ = [

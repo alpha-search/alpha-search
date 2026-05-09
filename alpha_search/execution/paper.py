@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any, Dict, List, Optional
 
-from alpha_search.core.errors import ExecutionError
 from alpha_search.core.models import Order, Position
 from alpha_search.execution.broker_base import BrokerAdapter
 

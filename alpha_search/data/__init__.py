@@ -1,9 +1,9 @@
 """Data layer for Alpha Search - providers, cache, and normalization."""
 
 from alpha_search.data.cache import CacheManager
+from alpha_search.data.normalizer import normalize_ohlcv
 from alpha_search.data.providers import ProviderRegistry
 from alpha_search.data.yfinance_provider import YFinanceProvider
-from alpha_search.data.normalizer import normalize_ohlcv
 
 try:
     from alpha_search.data.binance_provider import BinanceProvider

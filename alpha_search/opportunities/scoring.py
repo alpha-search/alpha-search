@@ -11,8 +11,6 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-import numpy as np
-
 
 def _clamp(value: float) -> float:
     """Clamp *value* to the inclusive range ``[0, 1]``."""

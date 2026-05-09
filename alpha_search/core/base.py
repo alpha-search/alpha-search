@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from alpha_search.core.models import OHLCV, Order, Position
+from alpha_search.core.models import Order, Position
 
 
 class DataProvider(ABC):

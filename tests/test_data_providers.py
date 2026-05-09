@@ -13,7 +13,6 @@ from alpha_search.data.normalizer import normalize_ohlcv
 from alpha_search.data.providers import ProviderRegistry
 from alpha_search.data.yfinance_provider import YFinanceProvider
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

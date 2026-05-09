@@ -1,6 +1,5 @@
 """Tests for the Terminal orchestrator."""
 
-import pytest
 
 
 class TestTerminalImports:

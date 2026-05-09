@@ -25,9 +25,9 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Dict
 
-from alpha_search.data_sources.base import DataSource, DataSourceRegistry
+from alpha_search.data_sources.base import DataSourceRegistry
 
 logger = logging.getLogger(__name__)
 

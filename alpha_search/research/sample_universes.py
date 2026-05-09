@@ -116,8 +116,8 @@ def _generate_ohlcv_for_ticker(
     pd.DataFrame
         Columns: Open, High, Low, Close, Volume.  Index: *dates*.
     """
-    n = len(dates)
-    dt = 1.0 / len(dates) * (len(dates) / 252)  # normalise to ~252 trading days/year
+    _n = len(dates)  # noqa: F841
+    _dt = 1.0 / len(dates) * (len(dates) / 252)  # noqa: F841  # normalise to ~252 trading days/year
     # Actually — simpler: compute daily parameters from annual ones
     # For n days, the fraction of a year per step = 252 / n for equities, 365 / n for crypto
     # We'll compute below directly
@@ -154,7 +154,7 @@ def _generate_ohlcv_gbm(
     Low   = min(Open, Close) - random perturbation.
     Volume is uniformly distributed between *volume_low* and *volume_high*.
     """
-    n = len(dates)
+    n = len(dates)  # noqa: F841
     # Daily parameters
     days_per_year = 252 if n <= 300 else 365
     dt = 1.0 / days_per_year

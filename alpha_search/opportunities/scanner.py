@@ -16,12 +16,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_search.opportunities.market_universes import (
-    NIFTY50_TICKERS,
-    SECTOR_MAP,
-    calculate_beta,
-    get_benchmark_ticker,
     get_company_name,
-    get_nifty50_tickers,
     get_sector,
 )
 from alpha_search.opportunities.models import PairOpportunity, StockOpportunity
@@ -380,7 +375,7 @@ class StockOpportunityScanner:
                 spread_pct=0.05,
                 avg_slippage=0.02,
             )
-            conf_score = FinalScore.confidence_score(
+            _ = FinalScore.confidence_score(  # noqa: F841
                 strategy_strength=momentum_score,
                 data_quality=0.85,
                 model_fit=momentum_score,
@@ -506,7 +501,7 @@ class StockOpportunityScanner:
             )
             hedge_score = FinalScore.hedgeability_score(has_hedge=True, hedge_cost=1.5)
             exec_score = FinalScore.execution_feasibility_score(spread_pct=0.04, avg_slippage=0.02)
-            conf_score = FinalScore.confidence_score(
+            _ = FinalScore.confidence_score(  # noqa: F841
                 strategy_strength=mr_score,
                 data_quality=0.80,
                 model_fit=mr_score,

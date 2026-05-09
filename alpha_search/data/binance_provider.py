@@ -126,7 +126,7 @@ class BinanceProvider(DataProvider):
         try:
             klines = client.get_historical_klines(
                 symbol.upper(),
-                Client.KLINE_INTERVAL_1DAY,
+                client.KLINE_INTERVAL_1DAY,
                 start_str=start_ms,
                 end_str=end_ms,
             )

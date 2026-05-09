@@ -29,20 +29,19 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from alpha_search.signals.technical import (
-    momentum,
-    ma_crossover,
-    z_score_mean_reversion,
-    bollinger_band_position,
-)
-from alpha_search.backtest.engine import BacktestEngine
 from alpha_search.backtest.costs import CostModel
-from alpha_search.backtest.metrics import Metrics
+from alpha_search.backtest.engine import BacktestEngine
+from alpha_search.signals.technical import (
+    bollinger_band_position,
+    ma_crossover,
+    momentum,
+    z_score_mean_reversion,
+)
 
 logger = logging.getLogger(__name__)
 

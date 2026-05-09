@@ -7,6 +7,8 @@ prompts. All methods return plain text.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from alpha_search.memory.models import MemoryRecord, StrategyMemory
 from alpha_search.memory.store import MemoryStore
 

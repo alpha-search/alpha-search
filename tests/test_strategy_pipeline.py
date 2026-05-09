@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 
 import pandas as pd
@@ -20,7 +19,6 @@ from alpha_search.research.strategy_pipeline import (
     MomentumPipeline,
     run_all_pipelines,
 )
-
 
 # ---------------------------------------------------------------------------
 # Sample universes

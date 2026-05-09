@@ -1,14 +1,11 @@
 """Tests for the sentiment analysis module (FinBERT)."""
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
 from alpha_search.sentiment.composite import CompositeSentiment
 from alpha_search.sentiment.finbert import FinBERTSentimentAnalyzer
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -25,7 +22,7 @@ def _mock_transformers_pipeline(label: str, score: float) -> MagicMock:
 def _make_analyzer_with_mock_pipeline(label: str = "positive", score: float = 0.88) -> FinBERTSentimentAnalyzer:
     """Create a FinBERTSentimentAnalyzer with a mocked pipeline (no transformers needed)."""
     mock_pipeline = _mock_transformers_pipeline(label, score)
-    analyzer = FinBERTSentimentAnalyzer.__new__(FinBERTSentimentAnalyzer)
+    analyzer = FinBERTSentimentAnalyzer.__new__(FinBERTSentimentAnalyzer)  # noqa: F841
     analyzer.model_name = "ProsusAI/finbert"
     analyzer._pipeline = mock_pipeline
     analyzer._tokenizer = None
@@ -46,7 +43,7 @@ class TestFinBERTLoads:
     def test_finbert_loads(self, mock_load: MagicMock) -> None:
         """Loading the sentiment analyser calls _load_model once."""
         mock_load.return_value = None
-        analyzer = FinBERTSentimentAnalyzer(model_name="ProsusAI/finbert")
+        _ = FinBERTSentimentAnalyzer(model_name="ProsusAI/finbert")  # noqa: F841
         mock_load.assert_called_once()
 
 
@@ -88,7 +85,7 @@ class TestFinBERTAnalyze:
             {"label": "NEGATIVE", "score": 0.70},
         ]
 
-        analyzer = FinBERTSentimentAnalyzer.__new__(FinBERTSentimentAnalyzer)
+        analyzer = FinBERTSentimentAnalyzer.__new__(FinBERTSentimentAnalyzer)  # noqa: F841
         analyzer.model_name = "ProsusAI/finbert"
         analyzer._pipeline = mock_pipeline
         analyzer._tokenizer = None

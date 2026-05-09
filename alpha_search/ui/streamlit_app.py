@@ -7,12 +7,10 @@ does **not** require a Streamlit runtime.
 
 from __future__ import annotations
 
-import functools
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 

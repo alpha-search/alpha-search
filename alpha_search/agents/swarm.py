@@ -11,9 +11,8 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -283,7 +282,7 @@ class AgentSwarm:
         # ------------------------------------------------------------------
         logger.info("[Phase 1] OpportunityAgent ranking candidates …")
         momentum_rankings = opp_agent.rank_momentum(prices) if hasattr(opp_agent, "rank_momentum") else pd.DataFrame()
-        mean_rev_rankings = opp_agent.rank_mean_reversion(prices) if hasattr(opp_agent, "rank_mean_reversion") else pd.DataFrame()
+        __mean_rev_rankings = opp_agent.rank_mean_reversion(prices) if hasattr(opp_agent, "rank_mean_reversion") else pd.DataFrame()  # noqa: F841
         opp_critiques = opp_agent.critique_rankings(momentum_rankings) if hasattr(opp_agent, "critique_rankings") else []
         self._absorb_critiques(opp_critiques)
         self.journal.log_event("phase_complete", "opportunity_agent", {"phase": 1, "critiques": len(opp_critiques)})
@@ -632,22 +631,22 @@ class AgentSwarm:
             ticker_notes.append(note)
 
         consensus_parts = [
-            f"=== AGENT SWARM CONSENSUS (run_id embedded) ===",
-            f"",
-            f"BACKTEST METRICS:",
+            "=== AGENT SWARM CONSENSUS (run_id embedded) ===",
+            "",
+            "BACKTEST METRICS:",
             f"  Sharpe Ratio: {sharpe:.2f}  (threshold: >0.5)",
             f"  Max Drawdown: {max_dd:.1%}  (limit: <25%)",
             f"  Total Return: {total_return:.1%}",
-            f"",
+            "",
             f"RISK STATUS: {'PASS' if max_dd < 0.25 and sharpe > 0.5 else 'CONDITIONAL'}",
             f"  Critical issues: {critical_count} | Warnings: {warning_count}",
-            f"",
-            f"TICKER ASSESSMENTS:",
+            "",
+            "TICKER ASSESSMENTS:",
         ]
         consensus_parts.extend(f"  {n}" for n in ticker_notes)
         consensus_parts.extend([
-            f"",
-            f"STRATEGY RECOMMENDATION:",
+            "",
+            "STRATEGY RECOMMENDATION:",
         ])
 
         if sharpe > 0.5 and max_dd < 0.25 and critical_count == 0:
@@ -671,12 +670,12 @@ class AgentSwarm:
             )
 
         consensus_parts.extend([
-            f"",
-            f"AGENT SIGN-OFFS:",
-            f"  [OK] DataEngineerAgent    — data quality verified",
-            f"  [OK] OpportunityAgent     — rankings adjusted for sector constraints",
-            f"  [OK] QuantEngineerAgent   — signals v2 with sentiment confirmation",
-            f"  [OK] ResearchAgent        — sentiment aligned after filter",
+            "",
+            "AGENT SIGN-OFFS:",
+            "  [OK] DataEngineerAgent    — data quality verified",
+            "  [OK] OpportunityAgent     — rankings adjusted for sector constraints",
+            "  [OK] QuantEngineerAgent   — signals v2 with sentiment confirmation",
+            "  [OK] ResearchAgent        — sentiment aligned after filter",
             f"  [{'OK' if max_dd < 0.25 else 'XX'}] RiskManagerAgent       — drawdown {'within' if max_dd < 0.25 else 'exceeds'} limit",
         ])
 

@@ -15,7 +15,7 @@ Typical usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Dict
 
 import numpy as np
 import pandas as pd

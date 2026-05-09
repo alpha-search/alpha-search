@@ -4,10 +4,8 @@ import os
 import tempfile
 
 import pandas as pd
-import pytest
 
 from alpha_search.data.cache import CacheManager
-
 
 # ---------------------------------------------------------------------------
 # Helpers

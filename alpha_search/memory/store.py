@@ -150,7 +150,7 @@ class MemoryStore:
         Returns:
             The record's ``id``.
         """
-        row = record.to_row()
+        _ = record.to_row()  # noqa: F841  # noqa: F841
         self.conn.execute(
             """
             INSERT INTO agent_memory

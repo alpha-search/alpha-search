@@ -14,7 +14,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 # ── Constants ────────────────────────────────────────────────────────────────
 
 MEMORY_TYPES = Literal[

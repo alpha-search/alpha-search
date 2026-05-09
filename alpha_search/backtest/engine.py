@@ -11,7 +11,7 @@ import pandas as pd
 from alpha_search.backtest.costs import CostModel
 from alpha_search.backtest.metrics import Metrics
 from alpha_search.core.errors import BacktestError
-from alpha_search.core.models import BacktestResult, Order
+from alpha_search.core.models import BacktestResult
 
 logger = logging.getLogger(__name__)
 
