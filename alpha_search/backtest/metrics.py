@@ -72,15 +72,16 @@ class Metrics:
 
     @staticmethod
     def max_drawdown(equity: pd.Series) -> float:
-        """Maximum peak-to-trough drawdown as a positive fraction.
+        """Maximum peak-to-trough drawdown as a negative fraction.
 
-        Returns a positive number, e.g. ``0.20`` means a 20 % drawdown.
+        Returns a negative number, e.g. ``-0.20`` means a 20 % drawdown.
+        A return of ``0.0`` means no drawdown occurred.
         """
         if equity.empty or len(equity) < 2:
             return 0.0
         cummax = equity.cummax()
         drawdown = (equity - cummax) / cummax
-        return float(-drawdown.min())
+        return float(drawdown.min())
 
     @staticmethod
     def max_drawdown_duration(equity: pd.Series) -> int:

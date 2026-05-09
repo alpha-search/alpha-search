@@ -262,7 +262,7 @@ class StrategyMemory(BaseModel):
     hypothesis: str = Field(..., description="What the strategy is trying to exploit")
     result_summary: str = Field(default="", description="Executive summary of backtest results")
     sharpe: Optional[float] = Field(default=None, description="Annualised Sharpe ratio (auto-clamped to [-10, 10])")
-    max_drawdown: Optional[float] = Field(default=None, ge=-1.0, le=1.0, description="Maximum drawdown as positive decimal (e.g. 0.18 = 18% drawdown)")
+    max_drawdown: Optional[float] = Field(default=None, ge=-1.0, le=1.0, description="Maximum drawdown as negative decimal (e.g. -0.18 = 18% drawdown)")
     total_return: Optional[float] = Field(default=None, description="Total return over backtest period")
     win_rate: Optional[float] = Field(default=None, description="Win rate fraction [0, 1] (auto-clamped)")
     turnover: Optional[float] = Field(default=None, ge=0.0, description="Annual turnover estimate")

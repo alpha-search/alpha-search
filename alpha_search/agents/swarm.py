@@ -8,6 +8,7 @@ and consensus building to generate robust trading strategies.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -294,7 +295,7 @@ class AgentSwarm:
         momentum_signals = quant_agent.build_momentum_signals(prices) if hasattr(quant_agent, "build_momentum_signals") else {}
         mean_rev_signals = quant_agent.build_mean_reversion_signals(prices) if hasattr(quant_agent, "build_mean_reversion_signals") else {}
         signals = {"momentum": momentum_signals, "mean_reversion": mean_rev_signals}
-        backtest_result = quant_agent.backtest(signals) if hasattr(quant_agent, "backtest") else {}
+        backtest_result = quant_agent.backtest(signals, prices) if hasattr(quant_agent, "backtest") else {}
         quant_critiques = quant_agent.critique_signals(signals) if hasattr(quant_agent, "critique_signals") else []
         self._absorb_critiques(quant_critiques)
         self.journal.log_event("phase_complete", "quant_engineer", {"phase": 2, "critiques": len(quant_critiques)})
@@ -340,7 +341,7 @@ class AgentSwarm:
 
         # Re-run backtest after improvements
         logger.info("Re-running backtest after Round 1 improvements …")
-        backtest_result_v2 = quant_agent.backtest(signals) if hasattr(quant_agent, "backtest") else backtest_result
+        backtest_result_v2 = quant_agent.backtest(signals, prices) if hasattr(quant_agent, "backtest") else backtest_result
 
         # ------------------------------------------------------------------
         # Phase 7 — Cross-agent critique (Round 2)
@@ -393,12 +394,18 @@ class AgentSwarm:
     def _filter_tickers_from_critiques(
         self, tickers: list[str], critiques: List[CritiqueMessage]
     ) -> list[str]:
-        """Remove tickers flagged with critical data-quality critiques."""
+        """Remove tickers flagged with critical data-quality critiques.
+
+        Uses regex word-boundary matching to avoid substring collisions
+        (e.g. "MET" matching inside "META").
+        """
         removed = set()
         for c in critiques:
             if c.critique_type == "data_quality" and c.severity == "critical":
                 for t in tickers:
-                    if t.upper() in c.message.upper():
+                    # Word-boundary match: standalone ticker, not substring
+                    pattern = r'\b' + re.escape(t) + r'\b'
+                    if re.search(pattern, c.message, re.IGNORECASE):
                         removed.add(t)
         return [t for t in tickers if t not in removed]
 
@@ -438,7 +445,8 @@ class AgentSwarm:
         else:
             max_dd = backtest_result.get("max_drawdown", 0.0)
             sharpe = backtest_result.get("sharpe_ratio", 0.0)
-            severity = "critical" if max_dd > 0.25 else "warning" if max_dd > 0.15 else "info"
+            # Negative drawdown convention: -0.30 = 30% drawdown
+            severity = "critical" if max_dd < -0.25 else "warning" if max_dd < -0.15 else "info"
             critiques.append(CritiqueMessage(
                 from_agent="risk_manager",
                 to_agent="quant_engineer",
@@ -638,7 +646,7 @@ class AgentSwarm:
             f"  Max Drawdown: {max_dd:.1%}  (limit: <25%)",
             f"  Total Return: {total_return:.1%}",
             "",
-            f"RISK STATUS: {'PASS' if max_dd < 0.25 and sharpe > 0.5 else 'CONDITIONAL'}",
+            f"RISK STATUS: {'PASS' if max_dd > -0.25 and sharpe > 0.5 else 'CONDITIONAL'}",
             f"  Critical issues: {critical_count} | Warnings: {warning_count}",
             "",
             "TICKER ASSESSMENTS:",
@@ -649,13 +657,14 @@ class AgentSwarm:
             "STRATEGY RECOMMENDATION:",
         ])
 
-        if sharpe > 0.5 and max_dd < 0.25 and critical_count == 0:
+        # With negative drawdown convention: -0.20 = 20% drawdown
+        if sharpe > 0.5 and max_dd > -0.25 and critical_count == 0:
             consensus_parts.append(
                 "  PROCEED — All agents agree strategy is within risk parameters. "
                 "Deploy with 20-day momentum lookback, sentiment confirmation filter, "
                 "and 8% trailing stop-loss on mean-reversion leg."
             )
-        elif sharpe > 0.5 and max_dd < 0.30 and warning_count <= 3:
+        elif sharpe > 0.5 and max_dd > -0.30 and warning_count <= 3:
             consensus_parts.append(
                 "  CONDITIONAL PROCEED — Strategy meets Sharpe threshold but requires "
                 "active risk monitoring. Max position size 15%, enforce sector cap, "
@@ -669,14 +678,31 @@ class AgentSwarm:
                 "wait for higher-volatility regime where mean-reversion performs better."
             )
 
+        # Conditional sign-offs based on actual critique counts
+        data_crits = [c for c in critiques if c.from_agent == "data_engineer"]
+        opp_crits = [c for c in critiques if c.from_agent == "opportunity_agent"]
+        quant_crits = [c for c in critiques if c.from_agent == "quant_engineer"]
+        research_crits = [c for c in critiques if c.from_agent == "research_agent"]
+        risk_crits = [c for c in critiques if c.from_agent == "risk_manager"]
+
+        def _agent_ok(agent_crits: list) -> str:
+            return "OK" if not any(c.severity == "critical" for c in agent_crits) else "XX"
+
+        def _agent_status(agent_crits: list) -> str:
+            n = len(agent_crits)
+            nc = sum(1 for c in agent_crits if c.severity == "critical")
+            if nc > 0:
+                return f"{nc} critical issue(s) flagged"
+            return f"{'verified' if n == 0 else f'{n} issue(s), none critical'}"
+
         consensus_parts.extend([
             "",
             "AGENT SIGN-OFFS:",
-            "  [OK] DataEngineerAgent    — data quality verified",
-            "  [OK] OpportunityAgent     — rankings adjusted for sector constraints",
-            "  [OK] QuantEngineerAgent   — signals v2 with sentiment confirmation",
-            "  [OK] ResearchAgent        — sentiment aligned after filter",
-            f"  [{'OK' if max_dd < 0.25 else 'XX'}] RiskManagerAgent       — drawdown {'within' if max_dd < 0.25 else 'exceeds'} limit",
+            f"  [{_agent_ok(data_crits)}] DataEngineerAgent    — {_agent_status(data_crits)}",
+            f"  [{_agent_ok(opp_crits)}] OpportunityAgent     — {_agent_status(opp_crits)}",
+            f"  [{_agent_ok(quant_crits)}] QuantEngineerAgent   — {_agent_status(quant_crits)}",
+            f"  [{_agent_ok(research_crits)}] ResearchAgent        — {_agent_status(research_crits)}",
+            f"  [{_agent_ok(risk_crits)}] RiskManagerAgent     — {_agent_status(risk_crits)} | drawdown {abs(max_dd):.1%}",
         ])
 
         return "\n".join(consensus_parts)

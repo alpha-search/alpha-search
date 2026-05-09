@@ -16,11 +16,14 @@ regardless of the underlying asset class or market.
 
 from __future__ import annotations
 
+import logging
 from itertools import combinations
 from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 try:
     from scipy import stats
@@ -494,8 +497,18 @@ def arbitrage_scan(
                      "hedge_ratio", "confidence_score"]
         )
 
+    # Validate: check for non-positive prices before log transform
+    invalid = (prices_df <= 0).any()
+    if invalid.any():
+        bad_tickers = invalid[invalid].index.tolist()
+        logger.warning(
+            "Excluding %d ticker(s) with non-positive prices: %s",
+            len(bad_tickers), bad_tickers,
+        )
+        prices_df = prices_df.drop(columns=bad_tickers)
+
     # Use log-prices for cointegration (more stable)
-    log_prices = np.log(prices_df.replace(0, np.nan))
+    log_prices = np.log(prices_df)
     log_prices = log_prices.dropna(how="all", axis=1).dropna(how="all", axis=0)
 
     if log_prices.shape[1] < 2:

@@ -96,7 +96,15 @@ class BacktestEngine:
         # Position sizing: signal directly maps to position
         # If signal is in [0, 1], interpret as position fraction
         # If signal has negative values, allow short positions
+        # Clip to [-1, 1] to prevent excessive leverage from raw signals
         position = aligned_signal.copy()
+        if position.abs().max() > 1.0:
+            logger.warning(
+                "Signal exceeds unit range (max_abs=%.2f) — clipping to [-1, 1]. "
+                "Consider adding a position sizer between signal generation and backtest.",
+                position.abs().max(),
+            )
+            position = position.clip(-1.0, 1.0)
         position.name = "position"
 
         # Strategy returns = position(t-1) * market_return(t)

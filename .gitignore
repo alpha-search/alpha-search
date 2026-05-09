@@ -57,6 +57,7 @@ nox/
 # ---------------------------------------------------------------------------
 .ipynb_checkpoints/
 *.ipynb
+!notebooks/*.ipynb
 profile_default/
 ipython_config.py
 

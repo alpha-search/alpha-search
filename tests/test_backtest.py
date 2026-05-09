@@ -108,8 +108,8 @@ class TestBacktestMetrics:
         assert "max_drawdown" in m
 
         assert m["total_return"] > 0  # positive drift => positive return
-        assert m["max_drawdown"] >= 0  # drawdown is non-negative
-        assert m["max_drawdown"] <= 1.0  # cannot lose more than 100 %
+        assert m["max_drawdown"] <= 0  # drawdown is negative (e.g. -0.20 = 20%)
+        assert m["max_drawdown"] >= -1.0  # cannot lose more than 100 %
         # Sharpe should be modestly positive for a drifting series
         assert m["sharpe_ratio"] > -2.0
 

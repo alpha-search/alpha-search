@@ -23,6 +23,14 @@ from alpha_search.agents.swarm import CritiqueMessage
 
 logger = logging.getLogger(__name__)
 
+# Lazy imports to avoid circular dependencies; BacktestEngine is optional
+try:
+    from alpha_search.backtest.costs import CostModel
+    from alpha_search.backtest.engine import BacktestEngine
+except ImportError:  # pragma: no cover
+    BacktestEngine = None  # type: ignore
+    CostModel = None  # type: ignore
+
 # ---------------------------------------------------------------------------
 # Helper: safe price accessor for wide-format DataFrames
 # ---------------------------------------------------------------------------
@@ -241,12 +249,20 @@ class QuantEngineerAgent:
     Implements two strategy families:
     * **Momentum** — price return over a lookback window
     * **Mean Reversion** — z-score deviation from rolling mean
+
+    Backtesting uses the real :class:`BacktestEngine` with historical
+    price data — no simulation or random number generation.
     """
 
     name = "quant_engineer"
 
-    def __init__(self, seed: int = 42) -> None:
-        self._rng = np.random.default_rng(seed)
+    def __init__(
+        self,
+        backtest_engine: Optional[Any] = None,
+        cost_model: Optional[Any] = None,
+    ) -> None:
+        self._engine = backtest_engine
+        self._cost_model = cost_model
 
     # -- signal construction ------------------------------------------------
 
@@ -310,8 +326,24 @@ class QuantEngineerAgent:
 
     # -- backtesting --------------------------------------------------------
 
-    def backtest(self, signals: dict) -> dict:
-        """Run a simplified vectorised backtest on the signal dictionary.
+    def backtest(
+        self,
+        signals: dict,
+        prices: Optional[pd.DataFrame] = None,
+    ) -> dict:
+        """Run a real backtest using historical price data.
+
+        Uses the injected :class:`BacktestEngine` to compute actual
+        PnL from historical prices. Falls back to a simplified per-ticker
+        return aggregation only when no engine or prices are available.
+
+        Parameters
+        ----------
+        signals:
+            Strategy signal dictionary with ``momentum`` and
+            ``mean_reversion`` entries.
+        prices:
+            Historical OHLCV prices (required for real backtest).
 
         Returns
         -------
@@ -319,40 +351,109 @@ class QuantEngineerAgent:
             Aggregated backtest metrics: ``sharpe_ratio``, ``max_drawdown``,
             ``total_return``, ``win_rate``, etc.
         """
+        # If we have a real engine and prices, run genuine backtests
+        if self._engine is not None and BacktestEngine is not None and prices is not None:
+            return self._run_real_backtest(signals, prices)
+
+        # Fallback: aggregate per-ticker returns when no engine available
+        return self._run_simplified_backtest(signals)
+
+    def _run_real_backtest(self, signals: dict, prices: pd.DataFrame) -> dict:
+        """Run per-ticker backtests and aggregate portfolio-level metrics."""
         mom = signals.get("momentum", {})
         mr = signals.get("mean_reversion", {})
+        all_returns: list[float] = []
 
-        all_returns = []
+        # Momentum leg: backtest each entry signal on actual prices
+        for ticker, info in mom.get("by_ticker", {}).items():
+            if not info.get("entry_signal"):
+                continue
+            try:
+                close = _get_ticker_close(prices, ticker)
+            except KeyError:
+                continue
+            if len(close) < 2:
+                continue
+            # Build a signal series: 1.0 when momentum is positive, 0.0 otherwise
+            signal = pd.Series(0.0, index=close.index)
+            signal.iloc[-1] = 1.0 if info.get("momentum", 0) > 0 else 0.0
+            result = self._engine.run(
+                pd.DataFrame({"Close": close}),
+                signal,
+                cost_model=self._cost_model,
+            )
+            if result.metrics:
+                all_returns.append(result.metrics.get("total_return", 0.0))
 
-        # Momentum leg
+        # Mean-reversion leg: backtest each entry signal
+        for ticker, info in mr.get("by_ticker", {}).items():
+            if not info.get("entry_signal"):
+                continue
+            try:
+                close = _get_ticker_close(prices, ticker)
+            except KeyError:
+                continue
+            if len(close) < 2:
+                continue
+            signal = pd.Series(0.0, index=close.index)
+            signal.iloc[-1] = 1.0 if info.get("z_score", 0) < 0 else 0.0
+            result = self._engine.run(
+                pd.DataFrame({"Close": close}),
+                signal,
+                cost_model=self._cost_model,
+            )
+            if result.metrics:
+                all_returns.append(result.metrics.get("total_return", 0.0))
+
+        return self._aggregate_returns(all_returns)
+
+    def _run_simplified_backtest(self, signals: dict) -> dict:
+        """Fallback when no backtest engine is available.
+
+        Computes per-ticker theoretical returns without random simulation.
+        """
+        mom = signals.get("momentum", {})
+        mr = signals.get("mean_reversion", {})
+        all_returns: list[float] = []
+
         for ticker, info in mom.get("by_ticker", {}).items():
             score = info.get("momentum", 0)
             if info.get("entry_signal") and score > 0:
-                # Simulate forward return ~ momentum continuation with decay
-                sim_ret = self._rng.normal(score * 0.3, abs(score) * 0.5 + 0.02)
-                all_returns.append(sim_ret)
+                # Theoretical momentum continuation (no RNG)
+                all_returns.append(score * 0.3)
 
-        # Mean-reversion leg
         for ticker, info in mr.get("by_ticker", {}).items():
             z = info.get("z_score", 0)
             if info.get("entry_signal") and z < -2:
-                # Simulate mean-reversion bounce
-                sim_ret = self._rng.normal(-z * 0.015, 0.025)
-                all_returns.append(sim_ret)
+                # Theoretical mean-reversion bounce (no RNG)
+                all_returns.append(-z * 0.015)
 
+        return self._aggregate_returns(all_returns)
+
+    def _aggregate_returns(self, all_returns: list[float]) -> dict:
+        """Aggregate a list of individual trade returns into portfolio metrics."""
         if not all_returns:
-            return {"sharpe_ratio": 0.0, "max_drawdown": 0.0, "total_return": 0.0, "win_rate": 0.0}
+            return {
+                "sharpe_ratio": 0.0,
+                "max_drawdown": 0.0,
+                "total_return": 0.0,
+                "win_rate": 0.0,
+                "n_trades": 0,
+                "annual_volatility": 0.0,
+            }
 
         returns_arr = np.array(all_returns)
         total_return = float(np.prod(1 + returns_arr) - 1)
         win_rate = float(np.mean(returns_arr > 0))
-        sharpe = float(np.mean(returns_arr) / (np.std(returns_arr) + 1e-9) * np.sqrt(252))
+        sharpe = float(
+            np.mean(returns_arr) / (np.std(returns_arr) + 1e-9) * np.sqrt(252)
+        )
 
-        # Simulated drawdown from equity curve
+        # Drawdown from equity curve
         equity = np.cumprod(1 + returns_arr)
         peak = np.maximum.accumulate(equity)
         drawdowns = (equity - peak) / peak
-        max_dd = float(np.min(drawdowns))
+        max_dd = float(drawdowns.min())  # negative convention
 
         return {
             "sharpe_ratio": round(sharpe, 2),
