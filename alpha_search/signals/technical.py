@@ -120,8 +120,11 @@ def rsi(prices: pd.Series, window: int = 14) -> pd.Series:
     gain = delta.where(delta > 0, 0.0)
     loss = -delta.where(delta < 0, 0.0)
 
-    avg_gain = gain.rolling(window=window).mean()
-    avg_loss = loss.rolling(window=window).mean()
+    # Wilder's smoothing — EMA with alpha = 1 / window
+    # This matches the standard RSI calculation and the _rsi()
+    # implementation in opportunities/strategies.py
+    avg_gain = gain.ewm(alpha=1.0 / window, min_periods=window).mean()
+    avg_loss = loss.ewm(alpha=1.0 / window, min_periods=window).mean()
 
     rs = avg_gain / avg_loss
     rsi_val = 100.0 - (100.0 / (1.0 + rs))

@@ -117,7 +117,7 @@ class BacktestEngine:
         costs = pd.Series(0.0, index=close.index, name="costs")
         if cost_model is not None:
             position_changes = position.diff().abs().fillna(0.0)
-            costs = cost_model.apply(position_changes, close)
+            costs = cost_model.apply(position_changes, close, portfolio_value=initial_capital)
             # Deduct costs from returns
             # Cost as fraction of capital
             cost_fraction = costs / initial_capital

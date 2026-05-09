@@ -87,10 +87,28 @@ def _all_tickers(prices: pd.DataFrame) -> list[str]:
         else:
             # level_0 has field names → level_1 has tickers
             return sorted([c for c in level_1 if c not in field_names])
-    # Heuristic: column names that look like tickers (uppercase, 1-5 chars)
+    # Heuristic: column names that look like tickers.
+    # Supports US tickers (AAPL, BRK-B), Indian (.NS suffix), and
+    # other formats up to 15 chars. Excludes known field names.
     flat = prices.columns.tolist()
-    tickers = [c for c in flat if isinstance(c, str) and c.isupper() and 1 <= len(c) <= 5]
-    return sorted(tickers) if tickers else []
+    field_names = {"Open", "High", "Low", "Close", "Volume", "Adj Close"}
+    tickers = []
+    for c in flat:
+        if not isinstance(c, str):
+            continue
+        if c in field_names:
+            continue
+        # Accept: uppercase tickers, tickers with . or -, suffixed tickers
+        looks_like_ticker = (
+            c.isupper() and 1 <= len(c) <= 5
+        ) or (
+            # BRK-B, RELIANCE.NS, etc.
+            any(ch.isupper() for ch in c) and len(c) <= 15
+            and not c.startswith("Unnamed")
+        )
+        if looks_like_ticker:
+            tickers.append(c)
+    return sorted(set(tickers)) if tickers else []
 
 
 # ===========================================================================
@@ -138,7 +156,11 @@ class DataEngineerAgent:
         )
 
     def validate_data(self, prices: pd.DataFrame) -> List[CritiqueMessage]:
-        """Validate *prices* and return a list of :class:`CritiqueMessage`."""
+        """Validate *prices* and return a list of :class:`CritiqueMessage`.
+
+        Uses vectorized operations across all tickers simultaneously
+        for O(1) scaling instead of per-ticker loops.
+        """
         critiques: List[CritiqueMessage] = []
         tickers = _all_tickers(prices)
 
@@ -153,34 +175,29 @@ class DataEngineerAgent:
             ))
             return critiques
 
+        # ---- Vectorized validation (one pass over all tickers) ----
+        # Build close price matrix: columns = tickers, rows = dates
+        close_matrix = pd.DataFrame({t: _get_ticker_close(prices, t) for t in tickers})
+        volume_matrix = pd.DataFrame({t: _get_ticker_volume(prices, t) for t in tickers})
+
+        n_total = len(close_matrix)
+        missing_pct = close_matrix.isna().mean()
+        avg_vol = volume_matrix.mean()
+        daily_rets = close_matrix.pct_change().dropna()
+        max_jump = daily_rets.abs().max()
+
+        # 1. Missing data — vectorized filter
         for ticker in tickers:
-            try:
-                close = _get_ticker_close(prices, ticker)
-                volume = _get_ticker_volume(prices, ticker)
-            except KeyError as exc:
-                critiques.append(CritiqueMessage(
-                    from_agent=self.name,
-                    to_agent="opportunity_agent",
-                    critique_type="data_quality",
-                    severity="critical",
-                    message=f"{ticker}: missing Close/Volume columns — {exc}",
-                    suggestion=f"Remove {ticker} from universe until data is available.",
-                ))
-                continue
-
-            n_total = len(close)
-            n_missing = close.isna().sum()
-            missing_pct = n_missing / n_total if n_total > 0 else 1.0
-
-            # 1. Missing data
-            if missing_pct > self.MISSING_THRESHOLD:
+            pct = missing_pct.get(ticker, 1.0)
+            if pct > self.MISSING_THRESHOLD:
+                n_missing = int(close_matrix[ticker].isna().sum())
                 critiques.append(CritiqueMessage(
                     from_agent=self.name,
                     to_agent="opportunity_agent",
                     critique_type="data_quality",
                     severity="warning",
                     message=(
-                        f"{ticker}: {missing_pct:.1%} of close prices are missing "
+                        f"{ticker}: {pct:.1%} of close prices are missing "
                         f"({n_missing}/{n_total} bars) — exceeds 10% threshold. "
                         "Backfill may introduce look-ahead bias."
                     ),
@@ -188,48 +205,47 @@ class DataEngineerAgent:
                 ))
 
             # 2. Low volume
-            avg_vol = volume.mean() if len(volume) > 0 else 0
-            if avg_vol < self.MIN_AVG_VOLUME:
+            vol = avg_vol.get(ticker, 0)
+            if vol < self.MIN_AVG_VOLUME:
                 critiques.append(CritiqueMessage(
                     from_agent=self.name,
                     to_agent="risk_manager",
                     critique_type="data_quality",
                     severity="critical",
                     message=(
-                        f"{ticker}: average daily volume is {avg_vol:,.0f} — "
+                        f"{ticker}: average daily volume is {vol:,.0f} — "
                         "below 100K minimum. Slippage will be severe for any meaningful position."
                     ),
                     suggestion=f"Remove {ticker} from tradeable universe.",
                 ))
 
             # 3. Suspicious jumps
-            if n_total >= 2:
-                daily_returns = close.pct_change().dropna()
-                max_jump = daily_returns.abs().max()
-                if max_jump > self.MAX_SINGLE_DAY_JUMP:
-                    jump_date = daily_returns.abs().idxmax()
-                    critiques.append(CritiqueMessage(
-                        from_agent=self.name,
-                        to_agent="quant_engineer",
-                        critique_type="data_quality",
-                        severity="warning",
-                        message=(
-                            f"{ticker}: single-day price jump of {max_jump:.1%} on {jump_date} — "
-                            "likely corporate action (split/dividend) or data error. "
-                            "Z-score mean-reversion will trigger falsely on this bar."
-                        ),
-                        suggestion=f"Verify corporate actions for {ticker} or apply split-adjustment before signal generation.",
-                    ))
-
-            # 4. Insufficient history
-            if n_total < self.MIN_HISTORY_DAYS:
+            jump = max_jump.get(ticker, 0)
+            if jump > self.MAX_SINGLE_DAY_JUMP:
+                jump_date = daily_rets[ticker].abs().idxmax()
                 critiques.append(CritiqueMessage(
                     from_agent=self.name,
                     to_agent="quant_engineer",
                     critique_type="data_quality",
                     severity="warning",
                     message=(
-                        f"{ticker}: only {n_total} trading days available — "
+                        f"{ticker}: single-day price jump of {jump:.1%} on {jump_date} — "
+                        "likely corporate action (split/dividend) or data error. "
+                        "Z-score mean-reversion will trigger falsely on this bar."
+                    ),
+                    suggestion=f"Verify corporate actions for {ticker} or apply split-adjustment before signal generation.",
+                ))
+
+            # 4. Insufficient history
+            ticker_count = close_matrix[ticker].notna().sum()
+            if ticker_count < self.MIN_HISTORY_DAYS:
+                critiques.append(CritiqueMessage(
+                    from_agent=self.name,
+                    to_agent="quant_engineer",
+                    critique_type="data_quality",
+                    severity="warning",
+                    message=(
+                        f"{ticker}: only {ticker_count} trading days available — "
                         "below 60-day minimum for reliable 20-day momentum estimation."
                     ),
                     suggestion=f"Use shorter lookback for {ticker} or exclude from momentum leg.",

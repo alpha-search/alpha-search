@@ -464,6 +464,7 @@ def arbitrage_scan(
     prices_df: pd.DataFrame,
     min_correlation: float = 0.7,
     max_pairs: int = 20,
+    max_tickers: int = 50,
 ) -> pd.DataFrame:
     """Scan for statistical arbitrage (pair-trading) opportunities.
 
@@ -482,6 +483,10 @@ def arbitrage_scan(
         Minimum Pearson correlation to consider a pair (default 0.7).
     max_pairs : int
         Maximum number of pairs to return, sorted by confidence (default 20).
+    max_tickers : int
+        Maximum tickers to consider. Pre-filters by variance to keep
+        the most volatile (default 50). Prevents O(n²) blow-up on
+        large universes like S&P 500.
 
     Returns
     -------
@@ -517,6 +522,18 @@ def arbitrage_scan(
                      "cointegration_score", "spread_zscore",
                      "hedge_ratio", "confidence_score"]
         )
+
+    # Pre-filter: keep only top *max_tickers* by return variance.
+    # This prevents O(n²) blow-up on large universes (e.g., S&P 500).
+    n_cols = log_prices.shape[1]
+    if n_cols > max_tickers:
+        logger.info(
+            "arbitrage_scan: %d tickers exceed max_tickers=%d, "
+            "pre-filtering by variance", n_cols, max_tickers,
+        )
+        variances = log_prices.diff().dropna().var()
+        top_tickers = variances.nlargest(max_tickers).index.tolist()
+        log_prices = log_prices[top_tickers]
 
     # Correlation on returns (more meaningful than price correlation)
     returns = log_prices.diff().dropna()

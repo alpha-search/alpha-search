@@ -31,20 +31,28 @@ class CostModel:
         self,
         position_changes: pd.Series,
         prices: pd.Series,
+        portfolio_value: float = 100_000.0,
     ) -> pd.Series:
         """Compute daily transaction costs.
 
+        Costs are proportional to the *notional value* traded
+        (turnover * portfolio_value), not the per-share price.
+
         Args:
-            position_changes: Absolute change in position size per day.
+            position_changes: Absolute change in position fraction per day.
+                A value of ``0.1`` means a 10 % portfolio rebalance.
             prices: Price series (same index as *position_changes*).
+                Kept for API compatibility; not used in cost calc.
+            portfolio_value: Portfolio value in currency terms.
+                Default ``100_000`` matches the backtest default.
 
         Returns:
             Daily cost in currency terms.
         """
         turnover = position_changes.abs().fillna(0.0)
-        costs = turnover * prices * self._total_cost_rate
-        costs.name = "costs"
-        return costs
+        notional = turnover * portfolio_value * self._total_cost_rate
+        notional.name = "costs"
+        return notional
 
     def __repr__(self) -> str:
         return (

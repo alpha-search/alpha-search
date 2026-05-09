@@ -212,6 +212,9 @@ class AgentSwarm:
         self.critiques: List[CritiqueMessage] = []
         self.memory = memory_store
         self.journal = AgentJournal(memory_store)
+        from .consensus_builder import ConsensusBuilder
+        self._critique_generator = None  # set in _check_required_agents
+        self._consensus_builder = ConsensusBuilder()
 
     # -- registration -------------------------------------------------------
 
@@ -219,6 +222,33 @@ class AgentSwarm:
         """Add an agent to the swarm."""
         self.agents[name] = agent
         logger.info("Registered agent '%s' (%s)", name, type(agent).__name__)
+
+    # -- agent validation ---------------------------------------------------
+
+    def _check_required_agents(self) -> None:
+        """Verify all 5 required agents are registered and build helpers."""
+        data_eng = self.agents.get("data_engineer")
+        opp_agent = self.agents.get("opportunity_agent")
+        quant_agent = self.agents.get("quant_engineer")
+        research_agent = self.agents.get("research_agent")
+        risk_agent = self.agents.get("risk_manager")
+
+        if any(a is None for a in [data_eng, opp_agent, quant_agent, research_agent, risk_agent]):
+            missing = [n for n, a in {
+                "data_engineer": data_eng, "opportunity_agent": opp_agent,
+                "quant_engineer": quant_agent, "research_agent": research_agent,
+                "risk_manager": risk_agent,
+            }.items() if a is None]
+            raise RuntimeError(f"Missing required agents: {missing}")
+
+        from .critique_generator import CritiqueGenerator
+        self._critique_generator = CritiqueGenerator(
+            self.agents.get("data_engineer"),
+            self.agents.get("opportunity_agent"),
+            self.agents.get("quant_engineer"),
+            self.agents.get("research_agent"),
+            self.agents.get("risk_manager"),
+        )
 
     # -- main entry point ---------------------------------------------------
 
@@ -249,20 +279,13 @@ class AgentSwarm:
         logger.info("Tickers: %s", tickers)
         logger.info("=" * 60)
 
-        # Resolve agents
+        # Resolve and validate agents
+        self._check_required_agents()
         data_eng = self.agents.get("data_engineer")
         opp_agent = self.agents.get("opportunity_agent")
         quant_agent = self.agents.get("quant_engineer")
         research_agent = self.agents.get("research_agent")
         risk_agent = self.agents.get("risk_manager")
-
-        if any(a is None for a in [data_eng, opp_agent, quant_agent, research_agent, risk_agent]):
-            missing = [n for n, a in {
-                "data_engineer": data_eng, "opportunity_agent": opp_agent,
-                "quant_engineer": quant_agent, "research_agent": research_agent,
-                "risk_manager": risk_agent,
-            }.items() if a is None]
-            raise RuntimeError(f"Missing required agents: {missing}")
 
         # ------------------------------------------------------------------
         # Phase 0 — Data validation
@@ -420,116 +443,9 @@ class AgentSwarm:
         rankings: pd.DataFrame,
     ) -> List[CritiqueMessage]:
         """Generate critiques from every agent about every other agent's work."""
-        critiques: List[CritiqueMessage] = []
-
-        # 1. Quant → Opportunity: critique ranking methodology
-        if hasattr(quant_agent, "critique_opportunity_rankings"):
-            critiques.extend(quant_agent.critique_opportunity_rankings(rankings))
-        else:
-            critiques.append(CritiqueMessage(
-                from_agent="quant_engineer",
-                to_agent="opportunity_agent",
-                critique_type="signal_quality",
-                severity="warning",
-                message=(
-                    "OpportunityAgent's momentum window (5-day) is too short — "
-                    "noisy signals with 3+ false breakouts per month on average. "
-                    "Backtests show extending to 20-day improves Sharpe from 0.31 to 0.74."
-                ),
-                suggestion="Switch to 20-day momentum lookback with 5-day holding minimum.",
-            ))
-
-        # 2. Risk → Quant: critique signal risk profile
-        if hasattr(risk_agent, "critique_signals"):
-            critiques.extend(risk_agent.critique_signals(signals))
-        else:
-            max_dd = backtest_result.get("max_drawdown", 0.0)
-            sharpe = backtest_result.get("sharpe_ratio", 0.0)
-            # Negative drawdown convention: -0.30 = 30% drawdown
-            severity = "critical" if max_dd < -0.25 else "warning" if max_dd < -0.15 else "info"
-            critiques.append(CritiqueMessage(
-                from_agent="risk_manager",
-                to_agent="quant_engineer",
-                critique_type="risk_concern",
-                severity=severity,
-                message=(
-                    f"Backtest max drawdown is {max_dd:.1%} — exceeds 25% limit. "
-                    f"Sharpe ratio {sharpe:.2f} is below 0.5 threshold. "
-                    "Mean-reversion leg shows left-tail concentration with 3 sigma events in March 2023."
-                ),
-                suggestion="Tighten stop-loss to 8% and reduce mean-reversion position sizing by 40%.",
-            ))
-
-        # 3. Research → Quant: sentiment vs signal alignment
-        if hasattr(research_agent, "critique_signals"):
-            critiques.extend(research_agent.critique_signals(signals))
-        else:
-            for ticker, sent in sentiment.items():
-                if sent.get("direction") == "bullish" and sent.get("score", 0) > 0.6:
-                    # Check if price is actually down
-                    if ticker in prices.columns.get_level_values(1).unique():
-                        ticker_prices = prices.xs(ticker, level=1, axis=1) if prices.columns.nlevels > 1 else prices[[c for c in prices.columns if ticker in c]]
-                        if len(ticker_prices) > 5:
-                            recent_return = ticker_prices.iloc[-1] / ticker_prices.iloc[-6] - 1
-                            if isinstance(recent_return, pd.Series):
-                                recent_return = recent_return.iloc[0]
-                            if recent_return < -0.03:
-                                critiques.append(CritiqueMessage(
-                                    from_agent="research_agent",
-                                    to_agent="quant_engineer",
-                                    critique_type="signal_quality",
-                                    severity="warning",
-                                    message=(
-                                        f"{ticker}: FinBERT sentiment is bullish (score {sent['score']:.2f}) "
-                                        f"but price is down {abs(recent_return):.1%} over 5 days — "
-                                        "bullish momentum signal contradicts sentiment divergence."
-                                    ),
-                                    suggestion="Require sentiment confirmation: only enter long if both price momentum AND sentiment are aligned.",
-                                ))
-
-        # 4. Data → Research: data coverage for sentiment
-        critiques.append(CritiqueMessage(
-            from_agent="data_engineer",
-            to_agent="research_agent",
-            critique_type="data_quality",
-            severity="info",
-            message=(
-                f"Sentiment data covers {len(sentiment)} tickers but "
-                f"only {sum(1 for v in sentiment.values() if v.get('article_count', 0) > 10)} "
-                "have sufficient article volume (>10 articles) for statistical significance."
-            ),
-            suggestion="Flag low-coverage tickers and apply confidence discounting to their sentiment scores.",
-        ))
-
-        # 5. Opportunity → Risk: concentration concerns
-        critiques.append(CritiqueMessage(
-            from_agent="opportunity_agent",
-            to_agent="risk_manager",
-            critique_type="risk_concern",
-            severity="warning",
-            message=(
-                "Top-5 momentum candidates are all technology sector: "
-                "META, NVDA, AAPL, GOOGL, MSFT — sector beta to QQQ is 0.94. "
-                "A single-sector shock could breach the 25% drawdown limit simultaneously across all positions."
-            ),
-            suggestion="Enforce max 2 names per sector and require at least 1 defensive position in top-5.",
-        ))
-
-        # 6. Risk → Opportunity: liquidity check
-        critiques.append(CritiqueMessage(
-            from_agent="risk_manager",
-            to_agent="opportunity_agent",
-            critique_type="risk_concern",
-            severity="warning",
-            message=(
-                "Lowest-liquidity name in top-5 (META) still has $2.1B daily volume — acceptable. "
-                "However, mean-reversion candidates include mid-caps with $45M ADV; "
-                "a 20% position would represent 8% of daily volume, slippage estimate 47bps."
-            ),
-            suggestion="Cap mid-cap position size at 5% or require minimum $100M ADV for 10%+ allocations.",
-        ))
-
-        return critiques
+        return self._critique_generator.generate(
+            prices, signals, backtest_result, sentiment, rankings
+        )
 
     def _apply_improvements(
         self,
@@ -542,75 +458,9 @@ class AgentSwarm:
         all_critiques: List[CritiqueMessage],
     ) -> List[dict]:
         """Apply improvements based on accumulated critiques."""
-        improvements: List[dict] = []
-
-        # Group critiques by target agent
-        by_target: Dict[str, List[CritiqueMessage]] = {}
-        for c in all_critiques:
-            by_target.setdefault(c.to_agent, []).append(c)
-
-        # Quant improvements
-        if "quant_engineer" in by_target:
-            quant_crits = by_target["quant_engineer"]
-            for crit in quant_crits:
-                if "drawdown" in crit.message.lower() and crit.severity == "critical":
-                    improvements.append({
-                        "agent": "quant_engineer",
-                        "trigger": crit.message[:80],
-                        "action": "Applied 8% trailing stop-loss to all mean-reversion positions.",
-                        "impact": "Estimated max drawdown reduction from 35% to 22%.",
-                    })
-                    # Actually modify signals if possible
-                    if "mean_reversion" in signals and isinstance(signals["mean_reversion"], dict):
-                        signals["mean_reversion"]["stop_loss"] = 0.08
-
-                if "momentum window" in crit.message.lower() or "lookback" in crit.message.lower():
-                    improvements.append({
-                        "agent": "quant_engineer",
-                        "trigger": crit.message[:80],
-                        "action": "Extended momentum lookback from 5 to 20 days; added 5-day holding minimum.",
-                        "impact": "Backtest Sharpe improves from 0.31 to 0.74, turnover drops 62%.",
-                    })
-                    if "momentum" in signals and isinstance(signals["momentum"], dict):
-                        signals["momentum"]["lookback"] = 20
-                        signals["momentum"]["min_hold_days"] = 5
-
-                if "sentiment" in crit.message.lower() and "contradict" in crit.message.lower():
-                    improvements.append({
-                        "agent": "quant_engineer",
-                        "trigger": crit.message[:80],
-                        "action": "Added sentiment-confirmation filter: require sentiment_score > 0.5 for long momentum entries.",
-                        "impact": "Reduces false breakout entries by ~38% in backtest.",
-                    })
-                    if "momentum" in signals and isinstance(signals["momentum"], dict):
-                        signals["momentum"]["sentiment_confirmation"] = True
-                        signals["momentum"]["sentiment_threshold"] = 0.5
-
-        # Opportunity improvements
-        if "opportunity_agent" in by_target:
-            opp_crits = by_target["opportunity_agent"]
-            for crit in opp_crits:
-                if "sector" in crit.message.lower() and "concentration" in crit.message.lower():
-                    improvements.append({
-                        "agent": "opportunity_agent",
-                        "trigger": crit.message[:80],
-                        "action": "Added sector-diversification constraint: max 2 names per sector, require 1 defensive.",
-                        "impact": "Portfolio sector exposure now capped; defensive buffer reduces tail risk.",
-                    })
-
-        # Risk improvements
-        if "risk_manager" in by_target:
-            risk_crits = by_target["risk_manager"]
-            for crit in risk_crits:
-                if "mid-cap" in crit.message.lower() or "slippage" in crit.message.lower():
-                    improvements.append({
-                        "agent": "risk_manager",
-                        "trigger": crit.message[:80],
-                        "action": "Set mid-cap position cap at 5% with $100M ADV minimum for 10%+ allocations.",
-                        "impact": "Estimated slippage reduced from 47bps to <15bps for all positions.",
-                    })
-
-        return improvements
+        return self._critique_generator.apply_improvements(
+            signals, backtest_result, rankings, all_critiques
+        )
 
     def _build_consensus(
         self,
@@ -621,91 +471,9 @@ class AgentSwarm:
         critiques: List[CritiqueMessage],
     ) -> str:
         """Synthesize a final consensus recommendation from all agent outputs."""
-        sharpe = backtest_result.get("sharpe_ratio", 0.0)
-        max_dd = backtest_result.get("max_drawdown", 1.0)
-        total_return = backtest_result.get("total_return", 0.0)
-
-        # Count critical issues
-        critical_count = sum(1 for c in critiques if c.severity == "critical")
-        warning_count = sum(1 for c in critiques if c.severity == "warning")
-
-        # Build ticker-specific notes
-        ticker_notes = []
-        for t in tickers:
-            sent = sentiment.get(t, {})
-            sent_dir = sent.get("direction", "neutral")
-            sent_score = sent.get("score", 0.5)
-            note = f"{t}: sentiment {sent_dir} ({sent_score:.2f})"
-            ticker_notes.append(note)
-
-        consensus_parts = [
-            "=== AGENT SWARM CONSENSUS (run_id embedded) ===",
-            "",
-            "BACKTEST METRICS:",
-            f"  Sharpe Ratio: {sharpe:.2f}  (threshold: >0.5)",
-            f"  Max Drawdown: {max_dd:.1%}  (limit: <25%)",
-            f"  Total Return: {total_return:.1%}",
-            "",
-            f"RISK STATUS: {'PASS' if max_dd > -0.25 and sharpe > 0.5 else 'CONDITIONAL'}",
-            f"  Critical issues: {critical_count} | Warnings: {warning_count}",
-            "",
-            "TICKER ASSESSMENTS:",
-        ]
-        consensus_parts.extend(f"  {n}" for n in ticker_notes)
-        consensus_parts.extend([
-            "",
-            "STRATEGY RECOMMENDATION:",
-        ])
-
-        # With negative drawdown convention: -0.20 = 20% drawdown
-        if sharpe > 0.5 and max_dd > -0.25 and critical_count == 0:
-            consensus_parts.append(
-                "  PROCEED — All agents agree strategy is within risk parameters. "
-                "Deploy with 20-day momentum lookback, sentiment confirmation filter, "
-                "and 8% trailing stop-loss on mean-reversion leg."
-            )
-        elif sharpe > 0.5 and max_dd > -0.30 and warning_count <= 3:
-            consensus_parts.append(
-                "  CONDITIONAL PROCEED — Strategy meets Sharpe threshold but requires "
-                "active risk monitoring. Max position size 15%, enforce sector cap, "
-                "and review drawdown weekly. Stop-loss at 8% must be hard-coded."
-            )
-        else:
-            consensus_parts.append(
-                "  HOLD — Strategy does not meet minimum risk criteria. "
-                "Key blockers: max drawdown exceeds 25% limit OR Sharpe below 0.5. "
-                "Recommended: tighten stop-loss further, reduce position sizes, or "
-                "wait for higher-volatility regime where mean-reversion performs better."
-            )
-
-        # Conditional sign-offs based on actual critique counts
-        data_crits = [c for c in critiques if c.from_agent == "data_engineer"]
-        opp_crits = [c for c in critiques if c.from_agent == "opportunity_agent"]
-        quant_crits = [c for c in critiques if c.from_agent == "quant_engineer"]
-        research_crits = [c for c in critiques if c.from_agent == "research_agent"]
-        risk_crits = [c for c in critiques if c.from_agent == "risk_manager"]
-
-        def _agent_ok(agent_crits: list) -> str:
-            return "OK" if not any(c.severity == "critical" for c in agent_crits) else "XX"
-
-        def _agent_status(agent_crits: list) -> str:
-            n = len(agent_crits)
-            nc = sum(1 for c in agent_crits if c.severity == "critical")
-            if nc > 0:
-                return f"{nc} critical issue(s) flagged"
-            return f"{'verified' if n == 0 else f'{n} issue(s), none critical'}"
-
-        consensus_parts.extend([
-            "",
-            "AGENT SIGN-OFFS:",
-            f"  [{_agent_ok(data_crits)}] DataEngineerAgent    — {_agent_status(data_crits)}",
-            f"  [{_agent_ok(opp_crits)}] OpportunityAgent     — {_agent_status(opp_crits)}",
-            f"  [{_agent_ok(quant_crits)}] QuantEngineerAgent   — {_agent_status(quant_crits)}",
-            f"  [{_agent_ok(research_crits)}] ResearchAgent        — {_agent_status(research_crits)}",
-            f"  [{_agent_ok(risk_crits)}] RiskManagerAgent     — {_agent_status(risk_crits)} | drawdown {abs(max_dd):.1%}",
-        ])
-
-        return "\n".join(consensus_parts)
+        return self._consensus_builder.build(
+            tickers, signals, backtest_result, sentiment, critiques
+        )
 
     def _build_strategy_summary(self, signals: dict, backtest_result: dict) -> list:
         """Build a concise strategy summary for the output."""

@@ -6,8 +6,6 @@ consensus building with varying Sharpe/drawdown, and ticker filtering.
 
 from __future__ import annotations
 
-import re
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -20,7 +18,6 @@ from alpha_search.agents.roles import (
     RiskManagerAgent,
 )
 from alpha_search.agents.swarm import AgentSwarm, CritiqueMessage
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -327,8 +324,8 @@ class TestRealBacktestIntegration:
 
     def test_backtest_with_prices_and_engine(self) -> None:
         """When engine + prices are provided, real backtest runs."""
-        from alpha_search.backtest.engine import BacktestEngine
         from alpha_search.backtest.costs import CostModel
+        from alpha_search.backtest.engine import BacktestEngine
 
         engine = BacktestEngine()
         cost_model = CostModel(commission=0.001, slippage=0.001)
