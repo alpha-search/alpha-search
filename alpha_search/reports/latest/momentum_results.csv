@@ -1,0 +1,2 @@
+strategy,total_return,annualized_return,annualized_volatility,sharpe_ratio,max_drawdown,win_rate,n_days,trades_per_year
+Momentum,1971.0008018452895,2.18136094658949,0.1175368362419034,18.55895578216871,-0.07868590457057081,0.8480629539951574,1652,12.915254237288135

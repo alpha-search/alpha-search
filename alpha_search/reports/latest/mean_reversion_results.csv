@@ -1,0 +1,2 @@
+strategy,total_return,annualized_return,annualized_volatility,sharpe_ratio,max_drawdown,win_rate,n_days,trades_per_year
+Mean Reversion,-0.9996685819142483,-0.7054154746012091,0.09140996526537971,-7.717052211465785,-0.9996685819142483,0.0006053268765133172,1652,25.65975126568347

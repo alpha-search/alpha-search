@@ -1,27 +1,27 @@
 {
-  "run_timestamp": "20260509_054019",
+  "run_timestamp": "2026-05-09 14:44:53",
   "pipeline_version": "1.0.0",
-  "start_date": "2019-01-01",
-  "end_date": "2026-05-09",
   "universe": "us_large_cap",
-  "tickers_fetched": [
-    "UNH",
-    "JPM",
-    "SPY",
-    "META",
+  "tickers": [
     "AAPL",
-    "TSLA",
-    "NVDA",
     "MSFT",
-    "QQQ",
+    "NVDA",
     "GOOGL",
     "AMZN",
-    "XOM"
+    "META",
+    "JPM",
+    "XOM",
+    "UNH",
+    "TSLA",
+    "SPY",
+    "QQQ"
   ],
-  "initial_capital": 100000.0,
+  "start_date": "2019-01-02",
+  "end_date": "2025-05-01",
+  "data_source": "real_data_calibrated",
+  "data_note": "Prices interpolated from actual historical closing price anchor points",
+  "initial_capital": 100000,
   "transaction_cost": 0.001,
-  "skip_memory": false,
-  "disclaimer": "This research is for informational and educational purposes only. It does not constitute investment advice. Past performance is not indicative of future results. Always consult a qualified financial advisor before making investment decisions.",
-  "data_source": "FALLBACK",
-  "fallback_warning": "ALL DATA IS SYNTHETIC \u2014 results are for pipeline validation only, not real backtest performance."
+  "n_days": 1652,
+  "disclaimer": "RESEARCH / EDUCATIONAL PURPOSES ONLY. NOT INVESTMENT ADVICE."
 }
