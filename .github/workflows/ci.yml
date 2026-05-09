@@ -53,8 +53,8 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/ --tb=long -q 2>&1 | tee pytest-output.txt || true
-          cat pytest-output.txt
+          python -m pytest tests/ --tb=short -q 2>&1 | tee pytest-output.txt
+          exit ${PIPESTATUS[0]}
 
       - name: Upload test output
         if: always()
