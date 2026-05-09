@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import logging
 import os
+import pickle
 import time
 from pathlib import Path
 from typing import Optional
@@ -62,6 +64,22 @@ class CacheManager:
         """Hash a potentially long key to a fixed-length string."""
         return hashlib.sha256(key.encode()).hexdigest()
 
+    def _serialize(self, data: pd.DataFrame) -> bytes:
+        """Serialize DataFrame to bytes. Uses parquet if pyarrow is available,
+        otherwise falls back to pickle."""
+        try:
+            return data.to_parquet()
+        except Exception:
+            # pyarrow/fastparquet not available — use pickle
+            return pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def _deserialize(self, blob: bytes) -> pd.DataFrame:
+        """Deserialize bytes to DataFrame. Auto-detects parquet vs pickle."""
+        # Parquet files start with magic bytes "PAR1"
+        if blob[:4] == b"PAR1":
+            return pd.read_parquet(io.BytesIO(blob))
+        return pickle.loads(blob)
+
     def set(self, key: str, data: pd.DataFrame, ttl: int = 86400) -> None:
         """Store *data* under *key* with a time-to-live in seconds.
 
@@ -73,8 +91,7 @@ class CacheManager:
         try:
             now = int(time.time())
             expires = now + ttl
-            # Serialize DataFrame to Parquet bytes
-            buf = data.to_parquet()
+            buf = self._serialize(data)
             hk = self._key_hash(key)
             self._connection.execute(
                 "INSERT OR REPLACE INTO cache VALUES (?, ?, ?, ?)",
@@ -102,7 +119,7 @@ class CacheManager:
                 logger.debug("Cache EXPIRED key=%s", key)
                 self.delete(key)
                 return None
-            df = pd.read_parquet(pd.io.common.BytesIO(data_blob))
+            df = self._deserialize(data_blob)
             logger.debug("Cache HIT key=%s rows=%d", key, len(df))
             return df
         except Exception as exc:

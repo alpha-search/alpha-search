@@ -33,10 +33,10 @@ def _status_map(status: str) -> str:
     mapping = {
         "pending": "active",
         "in_progress": "active",
-        "completed": "resolved",
         "done": "resolved",
         "failed": "rejected",
         "open": "active",
+        # "completed" is now a valid DB status — pass through unchanged
     }
     return mapping.get(status, status)
 
@@ -144,7 +144,7 @@ class AgentJournal:
             f"\n"
             f"**Rationale:** {rationale}\n"
             f"\n"
-            f"**Importance:** {importance_score:.1f}/1.0\n"
+            f"**Importance:** {importance_score:.2f}/1.0\n"
             f"\n"
             f"{tags_line}\n"
             f"---"
@@ -340,6 +340,8 @@ def _strategy_to_markdown(s: StrategyMemory) -> str:
         f"**Type:** {s.strategy_type} | **Market:** {s.market} | **Asset:** {s.asset_class}",
         "",
     ]
+    if s.universe:
+        lines.append(f"**Universe:** {', '.join(s.universe)}")
     if s.hypothesis:
         lines.append(f"**Hypothesis:** {s.hypothesis}")
     if s.result_summary:

@@ -436,6 +436,7 @@ class MeanReversionPipeline:
                     {
                         "ticker": ticker,
                         "z_score": latest_z,
+                        "zscore": latest_z,  # alias for backward compatibility
                         "abs_zscore": abs(latest_z),
                         "bb_position": latest_bb,
                         "deviation_pct": float(
@@ -658,6 +659,24 @@ class ArbitragePipeline:
     # ------------------------------------------------------------------ #
     # Step 1: Pair discovery (correlation)                               #
     # ------------------------------------------------------------------ #
+
+    def find_pairs(self, min_correlation: float = 0.5) -> pd.DataFrame:
+        """Alias for :meth:`discover_opportunities` that filters by min correlation.
+
+        Parameters
+        ----------
+        min_correlation:
+            Minimum absolute correlation threshold (default 0.5).
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns: ticker_a, ticker_b, correlation, hedge_ratio.
+        """
+        df = self.discover_opportunities()
+        if df.empty:
+            return df
+        return df[df["correlation"].abs() >= min_correlation].reset_index(drop=True)
 
     def discover_opportunities(self) -> pd.DataFrame:
         """Find the most correlated ticker pairs.
@@ -1011,12 +1030,16 @@ def run_all_pipelines(
         }
     )
 
+    from datetime import datetime, timezone
+
     combined = {
         "momentum": mom_results,
         "mean_reversion": mr_results,
         "arbitrage": arb_results,
         "combined_metrics": combined_metrics,
         "output_dir": output_dir,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "disclaimer": "RESEARCH / EDUCATIONAL PURPOSES ONLY. NOT INVESTMENT ADVICE.",
     }
 
     logger.info("=" * 60)

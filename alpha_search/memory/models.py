@@ -43,8 +43,8 @@ MEMORY_TYPE_VALUES = {
     "user_preference",
 }
 
-STATUS_VALUES = {"active", "resolved", "rejected", "archived"}
-STATUS_TYPE = Literal["active", "resolved", "rejected", "archived"]
+STATUS_VALUES = {"active", "resolved", "rejected", "archived", "completed"}
+STATUS_TYPE = Literal["active", "resolved", "rejected", "archived", "completed"]
 
 VERDICT_VALUES = {"accepted", "rejected", "watch", "needs_more_testing"}
 VERDICT_TYPE = Literal["accepted", "rejected", "watch", "needs_more_testing"]
@@ -325,12 +325,15 @@ class StrategyMemory(BaseModel):
     @field_validator("max_drawdown")
     @classmethod
     def _validate_drawdown(cls, value: Optional[float]) -> Optional[float]:
-        """Max drawdown must be between -1.0 and 1.0 if provided."""
+        """Max drawdown must be between -1.0 and 1.0 if provided.
+
+        Preserves negative sign (e.g. -0.12 = 12% drawdown).
+        """
         if value is None:
             return None
         if value < -1.0 or value > 1.0:
             raise ValueError(f"max_drawdown must be between -1.0 and 1.0. Got: {value}")
-        return round(abs(value), 6)
+        return round(value, 6)
 
     @field_validator("sharpe")
     @classmethod
