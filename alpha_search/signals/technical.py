@@ -126,8 +126,17 @@ def rsi(prices: pd.Series, window: int = 14) -> pd.Series:
     avg_gain = gain.ewm(alpha=1.0 / window, min_periods=window).mean()
     avg_loss = loss.ewm(alpha=1.0 / window, min_periods=window).mean()
 
-    rs = avg_gain / avg_loss
+    # Guard: when avg_loss is 0, RS would be inf → RSI = 100 (all gains).
+    # When both avg_gain and avg_loss are 0 (flat prices), RS would be NaN.
+    # We handle both: zero-loss → 100, flat → 50 (neutral).
+    zero_loss = avg_loss == 0
+    all_flat = zero_loss & (avg_gain == 0)
+    safe_loss = avg_loss.replace(0, np.nan)
+
+    rs = avg_gain / safe_loss
     rsi_val = 100.0 - (100.0 / (1.0 + rs))
+    rsi_val = rsi_val.where(~zero_loss, 100.0)  # all gains → 100
+    rsi_val = rsi_val.where(~all_flat, 50.0)    # flat prices → 50 (neutral)
     rsi_val.name = "rsi"
     return rsi_val
 

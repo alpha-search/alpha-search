@@ -17,6 +17,7 @@ summaries.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -28,6 +29,8 @@ from alpha_search.memory.models import (
     RiskDecision,
     StrategyMemory,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryStore:
@@ -119,14 +122,28 @@ class MemoryStore:
         if current:
             statements.append("".join(current).strip())
 
+        failed: list[tuple[str, str]] = []
         for stmt in statements:
             if not stmt:
                 continue
             try:
                 self.conn.execute(stmt)
-            except Exception:
-                # Skip unsupported statements (e.g. COMMENT ON in SQLite)
-                pass
+            except Exception as exc:
+                failed.append((stmt[:60], str(exc)))
+                logger.warning("Schema statement failed: %s — %s", stmt[:60], exc)
+
+        if failed:
+            logger.error(
+                "Schema initialization had %d/%d failures",
+                len(failed), len(statements),
+            )
+            # More than 50 % failures indicates a real problem, not just
+            # unsupported statements (e.g. COMMENT ON in SQLite).
+            if len(failed) > len(statements) * 0.5:
+                raise RuntimeError(
+                    f"Schema init failed for {len(failed)}/{len(statements)} "
+                    f"statements. First error: {failed[0][1]}"
+                )
 
     # ------------------------------------------------------------------ #
     # Helper: current timestamp
