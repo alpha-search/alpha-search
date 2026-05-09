@@ -41,16 +41,16 @@ jobs:
 
       - name: Lint with ruff
         run: |
-          ruff check alpha_search/ tests/
-          ruff format --check alpha_search/ tests/
+          python -m ruff check alpha_search/ tests/
+          python -m ruff format --check alpha_search/ tests/
 
       - name: Type check with mypy
         run: |
-          mypy alpha_search/
+          python -m mypy alpha_search/
 
       - name: Run tests with pytest
         run: |
-          pytest --cov --cov-report=xml --cov-report=term
+          python -m pytest tests/ -v --tb=short
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
