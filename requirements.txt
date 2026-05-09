@@ -1,0 +1,25 @@
+# Core dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+pydantic>=2.0.0
+duckdb>=0.9.0
+requests>=2.31.0
+
+# Data providers
+yfinance>=0.2.0
+python-binance>=1.0.0; extra == "binance"
+
+# API
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# UI
+streamlit>=1.28.0
+plotly>=5.18.0
+
+# NLP (optional)
+transformers>=4.30.0; extra == "nlp"
+torch>=2.0.0; extra == "nlp"
+
+# Optimization (optional)
+scipy>=1.11.0; extra == "optimize"

@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpha-search"
+version = "0.1.0"
+description = "Alpha Search - The Agent-Powered Quantitative Research Framework"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Alpha Search Team", email = "team@alpha-search.io"},
+]
+keywords = ["quantitative", "finance", "trading", "backtesting", "pandas"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "pydantic>=2.0.0",
+    "duckdb>=0.9.0",
+    "yfinance>=0.2.0",
+    "requests>=2.31.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "streamlit>=1.28.0",
+    "plotly>=5.18.0",
+]
+
+[project.optional-dependencies]
+binance = ["python-binance>=1.0.0"]
+nlp = ["transformers>=4.30.0", "torch>=2.0.0"]
+optimize = ["scipy>=1.11.0"]
+dev = ["pytest>=7.4.0", "pytest-cov>=4.1.0", "black>=23.0.0", "mypy>=1.6.0", "ruff>=0.1.0"]
+all = ["python-binance>=1.0.0", "transformers>=4.30.0", "torch>=2.0.0", "scipy>=1.11.0"]
+
+[project.scripts]
+alpha-search = "alpha_search.terminal:main"
+
+[project.urls]
+Homepage = "https://github.com/alpha-search/alpha-search"
+Repository = "https://github.com/alpha-search/alpha-search"
+Documentation = "https://alpha-search.readthedocs.io"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["alpha_search*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "N"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+yped_defs = true

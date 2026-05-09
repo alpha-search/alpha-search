@@ -1,0 +1,164 @@
+# =============================================================================
+# Quant.OS UI - Streamlit Frontend Dockerfile
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: Builder - Install dependencies
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS builder
+
+# Build arguments
+ARG APP_VERSION=0.1.0
+ARG BUILD_DATE
+ARG VCS_REF
+
+# Metadata labels
+LABEL maintainer="Quant.OS Team <dev@alpha-search.dev>" \
+      org.opencontainers.image.title="Quant.OS UI" \
+      org.opencontainers.image.description="Quant.OS Streamlit frontend interface" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.source="https://github.com/alpha-search/alpha-search"
+
+# Environment
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install alpha-search package + streamlit
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir -r /tmp/requirements.txt && \
+    pip install --no-cache-dir streamlit
+
+# ---------------------------------------------------------------------------
+# Stage 2: Production - Runtime image
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS production
+
+# Security: Create non-root user
+RUN groupadd --gid 1000 quantos && \
+    useradd --uid 1000 --gid quantos --shell /bin/false --create-home quantos
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Copy UI code
+COPY --chown=quantos:quantos alpha_search/ui/ ./alpha_search/ui/
+COPY --chown=quantos:quantos alpha_search/__init__.py ./alpha_search/__init__.py
+
+# Create streamlit config directory
+RUN mkdir -p /app/.streamlit && chown -R quantos:quantos /app
+
+# Streamlit configuration
+COPY --chown=quantos:quantos <<'EOF' /app/.streamlit/config.toml
+[server]
+headless = true
+port = 8501
+address = "0.0.0.0"
+enableCORS = false
+enableXsrfProtection = true
+maxUploadSize = 50
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#FF6B35"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1E1E2E"
+textColor = "#FAFAFA"
+font = "sans serif"
+
+[logger]
+level = "info"
+EOF
+
+# Create streamlit secrets placeholder
+RUN touch /app/.streamlit/secrets.toml && \
+    chmod 600 /app/.streamlit/secrets.toml && \
+    chown quantos:quantos /app/.streamlit/secrets.toml
+
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_ENV=production \
+    LOG_LEVEL=INFO \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_SERVER_PORT=8501 \
+    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    STREAMLIT_THEME_BASE=dark \
+    STREAMLIT_CONFIG_DIR=/app/.streamlit \
+    API_URL=http://alpha-search-api:8000 \
+    PYTHONPATH=/app
+
+# Expose Streamlit port
+EXPOSE 8501
+
+# Health check - Streamlit's built-in health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -fsS http://localhost:8501/healthz || exit 1
+
+# Switch to non-root user
+USER quantos
+
+# Run Streamlit
+CMD exec streamlit run alpha_search/ui/app.py \
+    --server.headless=true \
+    --server.port=8501 \
+    --server.address=0.0.0.0
+
+# ---------------------------------------------------------------------------
+# Stage 3: Development - Local dev with hot reload
+# ---------------------------------------------------------------------------
+FROM production AS development
+
+# Switch to root for dev
+USER root
+
+# Install dev tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Dev environment
+ENV APP_ENV=development \
+    LOG_LEVEL=DEBUG
+
+# Mount source code as volume
+VOLUME ["/app"]
+
+USER quantos
+
+# Run with auto-reload enabled
+CMD exec streamlit run alpha_search/ui/app.py \
+    --server.headless=true \
+    --server.port=8501 \
+    --server.address=0.0.0.0 \
+    --server.runOnSave=true

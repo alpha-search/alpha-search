@@ -1,0 +1,227 @@
+# Alpha Search GitHub Labels
+# Apply with: gh label create -R alpha-search/alpha-search -f "$name" -c "$color" -d "$description"
+# Or use: gh label clone --from-repo alpha-search/alpha-search --to-repo alpha-search/alpha-search
+
+# ============================================================================
+# TYPE — What kind of issue/PR is this?
+# ============================================================================
+
+- name: bug
+  color: "d73a4a"
+  description: Something isn't working
+
+- name: enhancement
+  color: "a2eeef"
+  description: New feature or request
+
+- name: documentation
+  color: "0075ca"
+  description: Improvements or additions to documentation
+
+- name: refactor
+  color: "c2e0c6"
+  description: Code change that neither fixes a bug nor adds a feature
+
+- name: test
+  color: "bfe5bf"
+  description: Adding or correcting tests
+
+- name: chore
+  color: "fef2c0"
+  description: Maintenance tasks, dependencies, build process
+
+- name: performance
+  color: "ffb3b3"
+  description: Performance improvements or regressions
+
+- name: security
+  color: "ff0000"
+  description: Security-related issues or patches
+
+# ============================================================================
+# PRIORITY — How urgent is this?
+# ============================================================================
+
+- name: priority-critical
+  color: "b60205"
+  description: Blocks release or core functionality
+
+- name: priority-high
+  color: "d93f0b"
+  description: Major impact, should be addressed soon
+
+- name: priority-medium
+  color: "fbca04"
+  description: Normal priority
+
+- name: priority-low
+  color: "0e8a16"
+  description: Minor impact or nice-to-have
+
+# ============================================================================
+# STATUS — Where is this in the workflow?
+# ============================================================================
+
+- name: triage
+  color: "d876e3"
+  description: Needs initial assessment and labeling
+
+- name: needs-info
+  color: "ff7619"
+  description: Waiting for reporter to provide more information
+
+- name: in-progress
+  color: "0052cc"
+  description: Actively being worked on
+
+- name: needs-review
+  color: "5319e7"
+  description: Awaiting code review
+
+- name: blocked
+  color: "e11d21"
+  description: Blocked by another issue or dependency
+
+- name: duplicate
+  color: "cfd3d7"
+  description: This issue or pull request already exists
+
+- name: wontfix
+  color: "ffffff"
+  description: This won't be worked on
+
+- name: good first issue
+  color: "7057ff"
+  description: Good for newcomers to the project
+
+- name: help wanted
+  color: "008672"
+  description: Looking for community contributors
+
+- name: question
+  color: "d876e3"
+  description: Further information is requested
+
+# ============================================================================
+# AREA — Which part of the codebase?
+# ============================================================================
+
+- name: area-engine
+  color: "1d76db"
+  description: Core backtesting and execution engine
+
+- name: area-scanner
+  color: "1d76db"
+  description: Opportunity scanner and signal generation
+
+- name: area-data
+  color: "1d76db"
+  description: Data providers, caching, and ingestion
+
+- name: area-strategy
+  color: "1d76db"
+  description: Strategy definitions and templates
+
+- name: area-ui
+  color: "1d76db"
+  description: Streamlit dashboard and visualizations
+
+- name: area-api
+  color: "1d76db"
+  description: REST API and server components
+
+- name: area-risk
+  color: "1d76db"
+  description: Risk management and position sizing
+
+- name: area-agents
+  color: "1d76db"
+  description: AI agents and orchestration
+
+- name: area-indicators
+  color: "1d76db"
+  description: Technical indicators and calculations
+
+- name: area-infrastructure
+  color: "1d76db"
+  description: CI/CD, Docker, deployment, tooling
+
+# ============================================================================
+# MARKET — Which market/geography?
+# ============================================================================
+
+- name: market-india
+  color: "ff9933"
+  description: Indian equity markets (NSE, BSE)
+
+- name: market-us
+  color: "002868"
+  description: US equity markets (NYSE, NASDAQ)
+
+- name: market-crypto
+  color: "f2a900"
+  description: Cryptocurrency markets
+
+- name: market-global
+  color: "34d399"
+  description: Multi-market or global features
+
+# ============================================================================
+# STRATEGY — Which strategy category?
+# ============================================================================
+
+- name: strategy-mean-reversion
+  color: "c5def5"
+  description: Mean reversion strategies
+
+- name: strategy-momentum
+  color: "c5def5"
+  description: Momentum and trend-following strategies
+
+- name: strategy-options
+  color: "c5def5"
+  description: Options strategies
+
+- name: strategy-sentiment
+  color: "c5def5"
+  description: Sentiment-based strategies
+
+- name: strategy-ml
+  color: "c5def5"
+  description: Machine learning strategies
+
+# ============================================================================
+# PLATFORM — Which operating system?
+# ============================================================================
+
+- name: os-linux
+  color: "c2e0c6"
+  description: Linux-specific issue
+
+- name: os-macos
+  color: "c2e0c6"
+  description: macOS-specific issue
+
+- name: os-windows
+  color: "c2e0c6"
+  description: Windows-specific issue
+
+# ============================================================================
+# DEPENDENCY — External library related
+# ============================================================================
+
+- name: deps-python
+  color: "fef2c0"
+  description: Python version compatibility
+
+- name: deps-pandas
+  color: "fef2c0"
+  description: pandas-related issue
+
+- name: deps-numpy
+  color: "fef2c0"
+  description: NumPy-related issue
+
+- name: deps-streamlit
+  color: "fef2c0"
+  description: Streamlit-related issue
