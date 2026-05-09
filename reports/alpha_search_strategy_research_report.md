@@ -2,7 +2,7 @@
            ALPHA SEARCH — STRATEGY RESEARCH REPORT
 ========================================================================
 
-Report Directory: reports
+Report Directory: N/A
 
 NOTE: All results are based on SYNTHETIC / DEMO data for
       research and educational purposes only.
@@ -12,32 +12,16 @@ NOTE: All results are based on SYNTHETIC / DEMO data for
 ------------------------------------------------------------------------
 
 Hypothesis:
-  Stocks with strong recent price momentum will continue trending in the same direction over the next 1–4 weeks.
+  N/A
 
 Risks:
-  - Momentum crashes during sharp market reversals (volatility spikes).
-  - Prolonged drawdowns in choppy / range-bound markets.
-  - Concentration risk if only a few names show strong signals.
-  - Transaction costs erode returns for high-turnover signals.
 
 Top Opportunities:
-        momentum_score  returns_20d  volume_ratio
-ticker                                           
-AMZN          0.723206     0.096042      0.430993
-META          0.581323     0.032821      1.481289
-MSFT          0.574458     0.030006      0.784254
-GOOGL         0.524510     0.009812      0.819272
-AAPL          0.415571    -0.034098      1.542669
+  No opportunities discovered.
 
 
 Performance Metrics:
-  Ticker              Total Ret   Sharpe   Max DD Win Rate   Ann. Ret      Vol
-  ------------------ ---------- -------- -------- -------- ---------- --------
-  AMZN                   27.09%     1.89    4.46%   49.60%     27.09%   11.99%
-  GOOGL                   1.71%     0.04   15.45%   47.22%      1.71%   12.14%
-  META                   -1.59%    -0.27   13.48%   48.41%     -1.59%   11.01%
-  MSFT                   -3.83%    -0.57    9.29%   45.24%     -3.83%    9.55%
-  AAPL                   -5.91%    -0.96   10.43%   42.86%     -5.91%    8.08%
+  No metrics available for momentum.
 
 
 ------------------------------------------------------------------------
@@ -45,32 +29,16 @@ Performance Metrics:
 ------------------------------------------------------------------------
 
 Hypothesis:
-  Stocks that deviate significantly from their rolling mean will revert toward the mean over the short term.
+  N/A
 
 Risks:
-  - Trend persistence can cause large losses if price continues diverging.
-  - Z-score can stay elevated for extended periods (non-stationarity).
-  - Requires disciplined stop-losses to prevent runaway losses.
-  - Low liquidity can exaggerate slippage on reversal entry/exit.
 
 Top Opportunities:
-         z_score  abs_zscore  bb_position  deviation_pct
-ticker                                                  
-META    1.380492    1.380492     0.891314       0.019679
-AAPL    1.340196    1.340196     0.623251       0.016479
-AMZN   -0.828809    0.828809     0.866039       0.046737
-MSFT   -0.526452    0.526452     0.553796       0.003280
-GOOGL  -0.159323    0.159323     0.517591       0.000718
+  No opportunities discovered.
 
 
 Performance Metrics:
-  Ticker              Total Ret   Sharpe   Max DD Win Rate   Ann. Ret      Vol
-  ------------------ ---------- -------- -------- -------- ---------- --------
-  META                   -3.17%    -0.60   11.38%   43.65%     -3.17%    8.20%
-  AMZN                   -8.06%    -1.34   10.61%   48.02%     -8.06%    7.56%
-  MSFT                  -11.92%    -1.56   15.46%   45.24%    -11.92%    9.14%
-  AAPL                  -12.32%    -1.85   14.38%   43.65%    -12.32%    8.03%
-  GOOGL                 -14.86%    -2.20   17.63%   43.25%    -14.86%    8.07%
+  No metrics available for mean_reversion.
 
 
 ------------------------------------------------------------------------
@@ -78,56 +46,22 @@ Performance Metrics:
 ------------------------------------------------------------------------
 
 Hypothesis:
-  Cointegrated / highly-correlated pairs will maintain a stationary spread, allowing profitable mean-reversion trades when the spread deviates from its equilibrium.
+  N/A
 
 Risks:
-  - Correlation breakdown — pairs can decouple during market stress.
-  - Cointegration failure — the spread may become non-stationary.
-  - Hedge ratio drift — requiring continuous recalibration.
-  - Double transaction costs (two legs per trade) erode edge.
-  - Capacity constrained — limited position size in less-liquid names.
 
 Top Pairs:
-  ticker_a ticker_b  correlation  hedge_ratio
-0     AAPL     AMZN    -0.106172    -0.312342
-1     MSFT    GOOGL    -0.104181    -0.336398
-2     AAPL     META    -0.097166    -0.536855
-3    GOOGL     AMZN     0.063859     0.117988
-4     AAPL     MSFT    -0.054772     0.244254
-5     MSFT     AMZN    -0.041950    -0.156394
-6     AAPL    GOOGL     0.031368    -0.304194
-7    GOOGL     META     0.031292     0.980007
-8     MSFT     META     0.028247    -0.148227
-9     AMZN     META    -0.010166     0.683520
+  No pairs discovered.
 
 Performance Metrics:
-  Ticker              Total Ret   Sharpe   Max DD Win Rate   Ann. Ret      Vol
-  ------------------ ---------- -------- -------- -------- ---------- --------
-  AAPL_AMZN              11.94%     0.89    6.45%   45.63%     11.94%   11.15%
-  GOOGL_META             15.19%     0.85   10.62%   46.83%     15.19%   15.68%
-  AAPL_META              10.22%     0.69    7.90%   47.62%     10.22%   12.35%
-  AAPL_GOOGL              6.28%     0.39    9.20%   45.63%      6.28%   12.34%
-  AMZN_META              -0.80%    -0.14    8.55%   47.22%     -0.80%   13.74%
-  AAPL_MSFT              -1.04%    -0.19    9.70%   44.44%     -1.04%   12.30%
-  MSFT_GOOGL             -3.96%    -0.39   15.72%   48.41%     -3.96%   13.18%
-  MSFT_META              -9.07%    -0.81   18.14%   47.62%     -9.07%   13.17%
-  GOOGL_AMZN            -13.03%    -1.16   20.44%   46.83%    -13.03%   13.06%
-  MSFT_AMZN             -14.20%    -1.25   18.03%   44.05%    -14.20%   13.13%
+  No metrics available for arbitrage.
 
 
 ------------------------------------------------------------------------
 4. COMBINED SUMMARY (AVERAGE METRICS)
 ------------------------------------------------------------------------
 
-                     momentum  mean_reversion   arbitrage
-total_return         0.034959       -0.100667    0.001534
-sharpe_ratio         0.024928       -1.508741   -0.111056
-max_drawdown         0.106194        0.138908    0.124751
-win_rate             0.466667        0.447619    0.464286
-annualized_return    0.034959       -0.100667    0.001534
-volatility           0.105529        0.081989    0.130096
-num_trades         232.000000      232.000000  220.400000
-num_days           252.000000      252.000000  252.000000
+  No combined metrics available.
 
 ========================================================================
                          END OF REPORT

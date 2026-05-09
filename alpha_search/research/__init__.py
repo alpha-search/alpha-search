@@ -34,6 +34,24 @@ from alpha_search.research.strategy_report import (
     generate_docx_report,
     generate_csv_summary,
 )
+from alpha_search.research.agent_report import (
+    AgentSwarmReportGenerator,
+)
+from alpha_search.research.swarm_pipeline import (
+    run_swarm_pipeline,
+    create_agent_swarm,
+    print_combined_summary,
+)
+from alpha_search.research.real_data_pipeline import (
+    run_full_pipeline,
+    print_summary,
+    fetch_real_data,
+    run_sentiment_analysis,
+    run_momentum_strategy,
+    run_mean_reversion_strategy,
+    run_arbitrage_strategy,
+    build_portfolio,
+)
 
 __all__ = [
     # Sample data generators
@@ -46,8 +64,22 @@ __all__ = [
     "MeanReversionPipeline",
     "ArbitragePipeline",
     "run_all_pipelines",
+    # Real data pipeline
+    "run_full_pipeline",
+    "print_summary",
+    "fetch_real_data",
+    "run_sentiment_analysis",
+    "run_momentum_strategy",
+    "run_mean_reversion_strategy",
+    "run_arbitrage_strategy",
+    "build_portfolio",
+    # Agent swarm pipeline
+    "run_swarm_pipeline",
+    "create_agent_swarm",
+    "print_combined_summary",
     # Reporting
     "StrategyReportGenerator",
+    "AgentSwarmReportGenerator",
     "generate_docx_report",
     "generate_csv_summary",
 ]
