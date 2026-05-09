@@ -21,7 +21,11 @@ from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy import stats
+
+try:
+    from scipy import stats
+except ImportError:  # pragma: no cover
+    stats = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +408,21 @@ def _adf_pvalue(spread: pd.Series) -> float:
     """Run Augmented Dickey-Fuller test on *spread* and return the p-value.
 
     A low p-value (< 0.05) suggests the spread is stationary → cointegrated.
+    Falls back to correlation-based heuristic when scipy is unavailable.
     """
+    if stats is None:
+        # scipy not available — use correlation-based heuristic
+        clean = spread.dropna()
+        if len(clean) < 30:
+            return 1.0
+        # Simple half-life approximation
+        lagged = clean.shift(1).dropna()
+        delta = clean.diff().dropna()
+        if len(lagged) > 0 and len(delta) > 0:
+            rho = np.corrcoef(lagged.values[:len(delta)], delta.values)[0, 1]
+            return 1.0 - abs(rho)  # proxy: higher correlation = lower p-value
+        return 1.0
+
     clean = spread.dropna()
     if len(clean) < 30:
         return 1.0  # not enough data
