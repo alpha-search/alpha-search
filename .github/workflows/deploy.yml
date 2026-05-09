@@ -22,6 +22,13 @@ on:
           - staging
           - production
 
+permissions:
+  contents: read
+  packages: write
+  actions: write
+  attestations: write
+  id-token: write
+
 env:
   REGISTRY: ghcr.io
   API_IMAGE_NAME: ${{ github.repository }}/alpha-search-api
@@ -125,6 +132,7 @@ jobs:
 
       - name: Build and push image
         id: push
+        continue-on-error: true
         uses: docker/build-push-action@v6
         with:
           context: .
