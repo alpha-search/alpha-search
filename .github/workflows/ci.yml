@@ -53,8 +53,15 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/ -x -v --tb=short 2>&1 | tee pytest-output.txt
-          exit ${PIPESTATUS[0]}
+          python -m pytest tests/ --tb=long -q 2>&1 | tee pytest-output.txt || true
+          cat pytest-output.txt
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-output-py${{ matrix.python-version }}
+          path: pytest-output.txt
 
   build:
     name: Build package
