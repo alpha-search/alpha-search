@@ -39,6 +39,12 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -e ".[dev]"
 
+      - name: Verify package install
+        run: |
+          python -c "import alpha_search; print('alpha_search version:', alpha_search.__version__)"
+          python -c "import duckdb; print('duckdb version:', duckdb.__version__)"
+          python -c "import pandas, numpy, pydantic; print('core deps OK')"
+
       - name: Lint with ruff
         continue-on-error: true
         run: |
