@@ -84,10 +84,10 @@ jobs:
       matrix:
         include:
           - dockerfile: ./Dockerfile
-            image: ${{ env.API_IMAGE_NAME }}
+            image: alpha-search-api
             target: production
           - dockerfile: ./Dockerfile.ui
-            image: ${{ env.UI_IMAGE_NAME }}
+            image: alpha-search-ui
             target: production
     steps:
       - name: Checkout code
@@ -153,13 +153,15 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     environment:
       name: ${{ startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging' }}
-      url: https://${{ secrets.VPS_HOST }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Deploy via SSH
-        if: secrets.VPS_HOST != '' && secrets.SSH_KEY != ''
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        if: env.VPS_HOST != '' && env.SSH_KEY != ''
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -242,17 +244,22 @@ jobs:
             echo "UI:  https://${{ secrets.VPS_HOST }}"
 
       - name: Notify Discord (success)
-        if: success() && secrets.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        if: success() && env.DISCORD_WEBHOOK_URL != ''
         uses: Ilshidur/action-discord@master
         with:
           args: |
             Alpha Search deployed successfully!
             Environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging' }}
             Commit: ${{ github.sha }}
-            URL: https://${{ secrets.VPS_HOST }}
+            URL: https://${{ env.VPS_HOST }}
 
       - name: Notify Discord (failure)
-        if: failure() && secrets.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        if: failure() && env.DISCORD_WEBHOOK_URL != ''
         uses: Ilshidur/action-discord@master
         with:
           args: |
