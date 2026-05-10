@@ -47,6 +47,17 @@ from alpha_search.research.strategy_report import (
     generate_csv_summary,
     generate_docx_report,
 )
+from alpha_search.research.indian_etf_intraday import (
+    INDIAN_ETFS,
+    LOOKBACK_WINDOWS,
+    PORTFOLIO_METHODS,
+    fetch_indian_etf_data,
+    generate_report,
+    run_full_pipeline as run_indian_etf_pipeline,
+    run_noise_breakout_backtest,
+    run_portfolio_backtest,
+    store_results_to_memory,
+)
 from alpha_search.research.swarm_pipeline import (
     create_agent_swarm,
     print_combined_summary,
@@ -82,4 +93,14 @@ __all__ = [
     "AgentSwarmReportGenerator",
     "generate_docx_report",
     "generate_csv_summary",
+    # Indian ETF intraday breakout
+    "INDIAN_ETFS",
+    "LOOKBACK_WINDOWS",
+    "PORTFOLIO_METHODS",
+    "fetch_indian_etf_data",
+    "run_noise_breakout_backtest",
+    "run_portfolio_backtest",
+    "run_indian_etf_pipeline",
+    "generate_report",
+    "store_results_to_memory",
 ]
