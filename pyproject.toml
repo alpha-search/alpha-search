@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alpha-search"
-version = "0.2.0"
+version = "0.2.2"
 description = "Alpha Search - The Agent-Powered Quantitative Research Framework"
 readme = "README.md"
 license = {text = "MIT"}

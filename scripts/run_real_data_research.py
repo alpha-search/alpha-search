@@ -26,33 +26,29 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import shutil
 import sys
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from alpha_search.research.metrics import (
+    compute_all_metrics,
+    rolling_momentum,
+    rolling_volatility,
+)
+
 # ---------------------------------------------------------------------------
 # Alpha Search imports
 # ---------------------------------------------------------------------------
-from alpha_search.research.universes import get_universe, Universe, US_LARGE_CAP
-from alpha_search.research.metrics import (
-    compute_all_metrics, rolling_volatility, rolling_momentum,
-    total_return, annualized_return, annualized_volatility,
-    sharpe_ratio, max_drawdown, win_rate,
-)
-from alpha_search.signals.technical import momentum, ma_crossover, z_score_mean_reversion
-from alpha_search.backtest.engine import BacktestEngine
-from alpha_search.backtest.costs import CostModel
+from alpha_search.research.universes import US_LARGE_CAP, get_universe
 
 try:
-    from alpha_search.memory import MemoryStore, AgentJournal
+    from alpha_search.memory import MemoryStore
     from alpha_search.memory.models import StrategyMemory
     _HAS_MEMORY: bool = True
 except Exception:
@@ -118,63 +114,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--verbose", action="store_true")
     return p
 
-# ===================================================================
-# STEP 0 — Fallback data (used only when real data fails)
-# ===================================================================
-def _generate_fallback_data(tickers: list[str], start: str, end: str | None) -> pd.DataFrame:
-    """Generate realistic synthetic OHLCV data clearly labeled as fallback.
-
-    Used only when yfinance rate-limits or is unavailable.  The data
-    preserves realistic statistical properties (annualized return ~8 %,
-    volatility ~20 %, volume ~10 M) so that the full research pipeline
-    can still execute and produce reports.
-    """
-    logger.warning("⚠⚠⚠  FALLBACK DATA MODE — all prices are synthetic  ⚠⚠⚠")
-    logger.warning("     Real data fetch failed (likely Yahoo Finance rate limit).")
-    logger.warning("     Results are for PIPELINE VALIDATION ONLY — NOT real backtests.")
-
-    rng = np.random.default_rng(42)
-    start_dt = pd.Timestamp(start)
-    end_dt = pd.Timestamp.today() if end is None or end.lower() == "latest" else pd.Timestamp(end)
-    dates = pd.date_range(start=start_dt, end=end_dt, freq="B")  # business days
-
-    records: list[dict] = []
-    base_prices = {
-        "AAPL": 150.0, "MSFT": 300.0, "NVDA": 200.0, "GOOGL": 130.0,
-        "AMZN": 140.0, "META": 300.0, "JPM": 170.0, "XOM": 115.0,
-        "UNH": 500.0, "TSLA": 250.0, "SPY": 450.0, "QQQ": 380.0,
-        "NFLX": 600.0, "CRM": 220.0, "ADBE": 520.0, "AVGO": 1200.0,
-        "BAC": 35.0, "WFC": 45.0, "GS": 380.0, "MS": 85.0,
-        "C": 55.0, "BLK": 800.0, "SPGI": 430.0, "AXP": 180.0, "SCHW": 65.0,
-        "RELIANCE.NS": 2400.0, "TCS.NS": 3500.0, "HDFCBANK.NS": 1600.0,
-        "INFY.NS": 1400.0, "HINDUNILVR.NS": 2500.0, "ICICIBANK.NS": 950.0,
-        "ITC.NS": 420.0, "SBIN.NS": 600.0, "BHARTIARTL.NS": 860.0, "KOTAKBANK.NS": 1750.0,
-    }
-
-    for t in tickers:
-        base = base_prices.get(t, 100.0)
-        # Ticker-specific seed for deterministic but different paths
-        t_seed = (hash(t) % 2**31)
-        t_rng = np.random.default_rng(42 + t_seed)
-        drift = t_rng.normal(0.0003, 0.016, len(dates))  # ~8% annual return, 25% vol
-        prices = base * np.exp(np.cumsum(drift))
-        vols = prices * 0.01  # 1 % intraday range
-        for i, d in enumerate(dates):
-            p = prices[i]
-            v = vols[i]
-            o = p + t_rng.normal(0, v)
-            h = max(o, p) + abs(t_rng.normal(0, v))
-            l = min(o, p) - abs(t_rng.normal(0, v))
-            c = p
-            vol = int(t_rng.integers(5_000_000, 50_000_000))
-            records.append({
-                "date": d, "ticker": t,
-                "open": round(float(o), 4), "high": round(float(h), 4),
-                "low": round(float(l), 4), "close": round(float(c), 4),
-                "adjusted_close": round(float(c), 4), "volume": vol,
-                "source": "FALLBACK",
-            })
-    return pd.DataFrame(records)
+# No fallback data generation — if real data cannot be fetched,
+# the pipeline raises a clear error telling the user how to fix it.
 
 
 # ===================================================================
@@ -207,16 +148,17 @@ def step_1_fetch(tickers: list[str], start: str, end: str | None, out: Path) -> 
         except Exception as exc:
             logger.warning("  ⚠ %s failed: %s — skipping", t, exc)
     if not records:
-        price = _generate_fallback_data(tickers, start, end)
-    else:
-        price = pd.DataFrame(records)
+        raise RuntimeError(
+            f"Failed to fetch data for any of the {len(tickers)} requested tickers. "
+            f"Check your network connection, verify ticker symbols, "
+            f"and ensure yfinance is installed: pip install yfinance"
+        )
+    price = pd.DataFrame(records)
     price["date"] = pd.to_datetime(price["date"]).dt.tz_localize(None)
     price = price.sort_values(["ticker", "date"]).reset_index(drop=True)
     _write_csv(price, out / "price_data.csv")
-    n_fallback = (price["source"] == "FALLBACK").sum()
-    n_real = len(price) - n_fallback
-    logger.info("STEP 1 done — %d rows, %d tickers (%d real, %d fallback)",
-                len(price), price["ticker"].nunique(), n_real, n_fallback)
+    logger.info("STEP 1 done — %d rows, %d tickers",
+                len(price), price["ticker"].nunique())
     return price
 
 # ===================================================================
@@ -449,18 +391,13 @@ def step_10_report(comb: pd.DataFrame, liq: pd.DataFrame, price: pd.DataFrame,
                    args: argparse.Namespace, out: Path) -> None:
     logger.info("STEP 10 — Generating report …")
     end_dt = args.end if args.end and args.end != "latest" else datetime.now().strftime("%Y-%m-%d")
-    is_fallback = (price["source"] == "FALLBACK").any() if "source" in price.columns else False
     meta = {
         "run_timestamp": RUN_TS, "pipeline_version": "1.0.0",
         "start_date": args.start, "end_date": end_dt, "universe": args.universe,
         "tickers_fetched": liq["ticker"].tolist() if not liq.empty else [],
         "initial_capital": args.capital, "transaction_cost": args.transaction_cost,
         "skip_memory": args.skip_memory, "disclaimer": DISCLAIMER,
-        "data_source": "FALLBACK" if is_fallback else "yfinance",
-        "fallback_warning": (
-            "ALL DATA IS SYNTHETIC — results are for pipeline validation only, "
-            "not real backtest performance." if is_fallback else None
-        ),
+        "data_source": "yfinance",
     }
     (out / "metadata.json").write_text(json.dumps(meta, indent=2, default=str))
 
@@ -471,15 +408,6 @@ def step_10_report(comb: pd.DataFrame, liq: pd.DataFrame, price: pd.DataFrame,
         f"**Capital:** ${args.capital:,.2f}  **Tx Cost:** {args.transaction_cost * 100:.2f}%\n",
         "---\n",
     ]
-    if is_fallback:
-        lines.extend([
-            "## ⚠️  FALLBACK DATA WARNING\n",
-            "> **All price data in this run is SYNTHETIC.** Yahoo Finance rate-limited "
-            "the data requests. The pipeline executed successfully using realistic "
-            "synthetic data to validate all components. **These results are NOT "
-            "real backtest performance.**\n",
-            "---\n",
-        ])
     if not liq.empty:
         lines.extend(["## Liquidity Summary\n", "| Ticker | Avg Daily Vol | Avg $ Vol | Missing % | Rank |",
                       "|--------|--------------|-----------|-----------|------|"])

@@ -8,7 +8,7 @@ All outputs are labelled as "research/educational only" and should not be
 construed as investment advice.
 
 Pipeline stages:
-    1. Data fetching (YFinanceProvider + direct yfinance fallback)
+    1. Data fetching (YFinanceProvider with retry logic and disk caching)
     2. FinBERT sentiment analysis on news headlines
     3. Global Market Opportunity scanning (momentum / mean-reversion / arbitrage)
     4. Signal generation (technical indicators)
@@ -81,9 +81,9 @@ def fetch_real_data(
 ) -> pd.DataFrame:
     """Fetch real OHLCV data from YFinance for given tickers.
 
-    Attempts to fetch each ticker individually using :class:`YFinanceProvider`.
-    If that fails, falls back to a direct ``yfinance.download`` call.
-    Tickers that fail both attempts are skipped with a warning.
+    Uses :class:`YFinanceProvider` which includes disk caching and
+    exponential-backoff retries.  If no data can be fetched for any
+    ticker, a clear error is raised.
 
     Parameters
     ----------
@@ -99,53 +99,53 @@ def fetch_real_data(
     pandas.DataFrame
         MultiIndex columns ``(ticker, field)`` where *field* is one of
         ``Open``, ``High``, ``Low``, ``Close``, ``Volume``.
-        Only tickers that were successfully fetched are included.
+
+    Raises
+    ------
+    RuntimeError
+        If YFinanceProvider is unavailable or no tickers could be fetched.
     """
-    # Try to initialise YFinanceProvider; fall back to direct yfinance if
-    # dependencies (e.g. duckdb) are unavailable.
     try:
         provider = YFinanceProvider()
     except Exception as exc:
-        logger.warning("YFinanceProvider unavailable (%s). Using direct yfinance.", exc)
-        provider = None
+        raise RuntimeError(
+            f"YFinanceProvider is unavailable: {exc}. "
+            f"Ensure yfinance is installed: pip install yfinance"
+        )
 
     frames: Dict[str, pd.DataFrame] = {}
+    failures: list[str] = []
 
     for ticker in tickers:
-        # Attempt 1: YFinanceProvider (with caching)
-        if provider is not None:
-            try:
-                df = provider.get_prices(ticker, start, end)
-                if df is not None and not df.empty and len(df) >= 10:
-                    frames[ticker] = df
-                    logger.info("Fetched %s: %d rows via YFinanceProvider", ticker, len(df))
-                    continue
-            except Exception as exc:
-                logger.debug("YFinanceProvider failed for %s: %s", ticker, exc)
-
-        # Attempt 2: Direct yfinance download
         try:
-            import yfinance as yf
-
-            df = yf.download(ticker, start=start, end=end, progress=False)
+            df = provider.get_prices(ticker, start, end)
             if df is not None and not df.empty and len(df) >= 10:
-                # Normalise column names
-                df.columns = [c.title() if isinstance(c, str) else c for c in df.columns]
-                # Keep only standard OHLCV columns
-                std_cols = ["Open", "High", "Low", "Close", "Volume"]
-                available = [c for c in std_cols if c in df.columns]
-                if available:
-                    frames[ticker] = df[available]
-                    logger.info("Fetched %s: %d rows via direct yfinance", ticker, len(df))
-                    continue
+                frames[ticker] = df
+                logger.info(
+                    "Fetched %s: %d rows via YFinanceProvider", ticker, len(df)
+                )
+            else:
+                failures.append(ticker)
+                logger.warning("No data for %s — empty result", ticker)
         except Exception as exc:
-            logger.debug("Direct yfinance failed for %s: %s", ticker, exc)
-
-        logger.warning("Failed to fetch %s — skipping", ticker)
+            failures.append(ticker)
+            logger.warning("YFinanceProvider failed for %s: %s", ticker, exc)
 
     if not frames:
-        logger.error("No data fetched for any ticker")
-        return pd.DataFrame()
+        raise RuntimeError(
+            f"No data fetched for any of the {len(tickers)} requested tickers. "
+            f"Failures: {', '.join(failures[:10])}{'...' if len(failures) > 10 else ''}. "
+            f"Check your network connection, verify ticker symbols at "
+            f"https://finance.yahoo.com/lookup, and ensure yfinance is installed."
+        )
+
+    if failures:
+        logger.warning(
+            "Successfully fetched %d/%d tickers. Failed: %s",
+            len(frames),
+            len(tickers),
+            ", ".join(failures[:10]),
+        )
 
     # Build MultiIndex DataFrame
     combined: Dict[str, Dict[str, pd.Series]] = {}
@@ -165,7 +165,9 @@ def fetch_real_data(
             result_frames.append(field_df)
 
     if not result_frames:
-        return pd.DataFrame()
+        raise RuntimeError(
+            "Failed to build MultiIndex DataFrame — no OHLCV fields found."
+        )
 
     # Concatenate along columns and sort
     result = pd.concat(result_frames, axis=1)
@@ -189,8 +191,8 @@ def run_sentiment_analysis(
     """Run FinBERT sentiment analysis on a list of tickers.
 
     Uses :class:`FinBERTSentimentAnalyzer` to analyse a composite text
-    built from the ticker symbol and a brief description.  If FinBERT is
-    unavailable, falls back to the built-in keyword-based analyser.
+    built from the ticker symbol and a brief description.  If FinBERT
+    is unavailable, an error is raised (no synthetic fallback).
 
     Parameters
     ----------
@@ -202,37 +204,55 @@ def run_sentiment_analysis(
     dict[str, dict]
         Mapping ``{ticker: {"score": float, "positive": float,
         "negative": float, "neutral": float}}``.
+
+    Raises
+    ------
+    RuntimeError
+        If FinBERT is not available and no sentiment data can be produced.
     """
     try:
         analyzer = FinBERTSentimentAnalyzer()
     except Exception as exc:
-        logger.warning("FinBERT initialisation failed: %s. Using fallback.", exc)
-        analyzer = None
+        raise RuntimeError(
+            f"FinBERT sentiment analyser is unavailable: {exc}. "
+            f"Install the required dependencies "
+            f"(transformers, torch) to enable sentiment analysis."
+        )
 
     results: dict[str, dict] = {}
+    failures: list[str] = []
+
     for ticker in tickers:
         try:
-            if analyzer is not None:
-                # Build a composite description for the ticker
-                description = _ticker_description(ticker)
-                sentiment = analyzer.analyze(description)
-                results[ticker] = {
-                    "score": float(sentiment.get("score", 0.0)),
-                    "positive": float(sentiment.get("positive", 0.33)),
-                    "negative": float(sentiment.get("negative", 0.33)),
-                    "neutral": float(sentiment.get("neutral", 0.34)),
-                }
-            else:
-                results[ticker] = {
-                    "score": 0.0, "positive": 0.33, "negative": 0.33, "neutral": 0.34,
-                }
+            description = _ticker_description(ticker)
+            sentiment = analyzer.analyze(description)
+            results[ticker] = {
+                "score": float(sentiment.get("score", 0.0)),
+                "positive": float(sentiment.get("positive", 0.33)),
+                "negative": float(sentiment.get("negative", 0.33)),
+                "neutral": float(sentiment.get("neutral", 0.34)),
+            }
         except Exception as exc:
             logger.warning("Sentiment analysis failed for %s: %s", ticker, exc)
-            results[ticker] = {
-                "score": 0.0, "positive": 0.33, "negative": 0.33, "neutral": 0.34,
-            }
+            failures.append(ticker)
 
-    logger.info("Sentiment analysis complete for %d tickers", len(tickers))
+    if not results:
+        raise RuntimeError(
+            f"Sentiment analysis failed for all {len(tickers)} tickers. "
+            f"Ensure FinBERT dependencies are installed: "
+            f"pip install transformers torch"
+        )
+
+    if failures:
+        logger.warning(
+            "Sentiment analysis completed for %d/%d tickers. "
+            "Failed: %s",
+            len(results),
+            len(tickers),
+            ", ".join(failures[:10]),
+        )
+
+    logger.info("Sentiment analysis complete for %d tickers", len(results))
     return results
 
 
@@ -240,7 +260,10 @@ def _ticker_description(ticker: str) -> str:
     """Return a brief text description for a ticker to feed FinBERT."""
     from alpha_search.opportunities.market_universes import get_company_name
 
-    name = get_company_name(ticker)
+    try:
+        name = get_company_name(ticker)
+    except Exception:
+        name = ticker
     return f"{ticker} ({name}) stock market performance and financial outlook"
 
 
@@ -916,8 +939,12 @@ def run_full_pipeline(
     # ------------------------------------------------------------------
     logger.info("--- Running FinBERT sentiment analysis ---")
     all_tickers = list(set(US_TOP20 + INDIA_TOP20))
-    sentiment_results = run_sentiment_analysis(all_tickers)
-    results["sentiment"] = sentiment_results
+    try:
+        sentiment_results = run_sentiment_analysis(all_tickers)
+        results["sentiment"] = sentiment_results
+    except RuntimeError as exc:
+        logger.warning("Sentiment analysis unavailable: %s", exc)
+        results["sentiment"] = {}
 
     # ------------------------------------------------------------------
     # 4. Run strategies on US data
@@ -958,11 +985,10 @@ def run_full_pipeline(
                 "summary": "No metrics available for portfolio construction",
             }
     else:
-        logger.warning("No US data available — skipping strategies")
-        results["momentum"] = {"metrics_df": pd.DataFrame(), "verdict": "needs_more_testing"}
-        results["mean_reversion"] = {"metrics_df": pd.DataFrame(), "verdict": "needs_more_testing"}
-        results["arbitrage"] = {"metrics_df": pd.DataFrame(), "verdict": "needs_more_testing"}
-        results["portfolio"] = {"allocations": {}, "risk_metrics": {}}
+        raise RuntimeError(
+            "No US data available — cannot run strategies. "
+            "Check network connection and ensure yfinance is installed."
+        )
 
     # ------------------------------------------------------------------
     # 6. Log to memory

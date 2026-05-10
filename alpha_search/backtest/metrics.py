@@ -143,7 +143,7 @@ class Metrics:
         Args:
             returns: Daily returns.
             max_dd: Pre-computed max drawdown (positive). If ``None``,
-                it is computed from a synthetic equity curve.
+                it is computed from the cumulative returns equity curve.
         """
         if returns.empty:
             return 0.0

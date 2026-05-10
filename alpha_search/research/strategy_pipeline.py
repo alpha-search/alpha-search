@@ -13,13 +13,13 @@ All pipelines use existing Alpha Search modules exclusively:
 * ``alpha_search.backtest.metrics`` for performance measurement.
 
 A convenience function :func:`run_all_pipelines` executes all three pipelines
-against synthetic data and returns a combined results dictionary.
+against real data fetched from Yahoo Finance and returns a combined results dictionary.
 
 Example::
 
     from alpha_search.research import MomentumPipeline, generate_us_equity_data
 
-    prices = generate_us_equity_data()
+    prices = generate_us_equity_data()  # fetches real data from Yahoo Finance
     pipeline = MomentumPipeline(prices, tickers=["AAPL", "MSFT", "GOOGL"])
     result = pipeline.run()
     print(result["metrics"])
@@ -838,10 +838,10 @@ class ArbitragePipeline:
     ) -> Dict[str, Any]:
         """Run backtests on each pair's spread signal.
 
-        The backtest uses a *synthetic spread price* built from the
-        log-spread series (exponentiated and normalised) so that the
-        existing :class:`BacktestEngine` can be reused without
-        modification.
+        The backtest uses the *spread price* derived from real close
+        prices of both securities in the pair.  The spread is computed
+        as ``exp(log(price_a) - hedge_ratio * log(price_b) - mean)``
+        and fed to the :class:`BacktestEngine` as a price series.
 
         Parameters
         ----------
@@ -879,25 +879,31 @@ class ArbitragePipeline:
                 a_aligned = close_a.loc[common_idx]
                 b_aligned = close_b.loc[common_idx]
 
-                # Synthetic spread price for backtesting
+                # Spread price derived from real close prices
                 log_a = np.log(a_aligned)
                 log_b = np.log(b_aligned)
                 spread = log_a - beta * log_b
                 spread_price = np.exp(spread - spread.mean())
 
-                # Build a minimal OHLCV DataFrame around the spread price
-                synthetic_df = pd.DataFrame(
+                # Build OHLCV DataFrame from the spread price
+                # Intraday range estimated from spread volatility
+                spread_vol = spread_price.pct_change().std()
+                if pd.isna(spread_vol) or spread_vol == 0:
+                    spread_vol = 0.001  # minimal default
+                intraday_range = spread_vol * spread_price
+
+                ohlcv_df = pd.DataFrame(
                     {
                         "Open": spread_price,
-                        "High": spread_price * 1.001,
-                        "Low": spread_price * 0.999,
+                        "High": spread_price + intraday_range,
+                        "Low": spread_price - intraday_range,
                         "Close": spread_price,
                         "Volume": pd.Series(1_000_000, index=spread_price.index),
                     }
                 )
 
                 result = engine.run(
-                    prices=synthetic_df,
+                    prices=ohlcv_df,
                     signal=signal,
                     initial_capital=self.capital,
                     cost_model=cost_model,
@@ -990,10 +996,10 @@ def run_all_pipelines(
 ) -> Dict[str, Any]:
     """Run all three research pipelines and return combined results.
 
-    Generates synthetic US equity data, executes the momentum,
-    mean-reversion, and arbitrage pipelines, and returns a unified
-    results dictionary.  Optionally creates *output_dir* for future
-    report generation.
+    Fetches real US equity data from Yahoo Finance, executes the
+    momentum, mean-reversion, and arbitrage pipelines, and returns a
+    unified results dictionary.  Optionally creates *output_dir* for
+    future report generation.
 
     Parameters
     ----------
@@ -1003,13 +1009,19 @@ def run_all_pipelines(
         Override list of tickers.  Defaults to
         ``["AAPL", "MSFT", "GOOGL", "AMZN", "META"]``.
     days:
-        Number of trading days of synthetic data to generate.
+        Number of trading days of data to fetch.
 
     Returns
     -------
     dict
         Top-level keys: ``"momentum"``, ``"mean_reversion"``, ``"arbitrage"``,
         ``"combined_metrics"``, ``"output_dir"``.
+
+    Raises
+    ------
+    RuntimeError
+        If data fetching fails (e.g. yfinance not installed or network
+        unavailable).
     """
     from alpha_search.research.sample_universes import generate_us_equity_data
 
@@ -1020,9 +1032,9 @@ def run_all_pipelines(
     logger.info("ALPHA SEARCH — Full Research Pipeline")
     logger.info("=" * 60)
 
-    # Generate data
-    logger.info("Generating synthetic US equity data (%d days)...", days)
-    prices = generate_us_equity_data(tickers=tickers, days=days, seed=42)
+    # Fetch real data from Yahoo Finance
+    logger.info("Fetching real US equity data (%d days)...", days)
+    prices = generate_us_equity_data(tickers=tickers, days=days)
 
     # --- Momentum ---
     logger.info("-" * 40)

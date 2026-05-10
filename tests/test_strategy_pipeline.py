@@ -1,4 +1,8 @@
-"""Tests for the Alpha Search strategy research pipeline."""
+"""Tests for the Alpha Search strategy research pipeline.
+
+These tests use real market data fetched from Yahoo Finance and
+CoinGecko.  Network access is required.
+"""
 
 from __future__ import annotations
 
@@ -21,36 +25,45 @@ from alpha_search.research.strategy_pipeline import (
 )
 
 # ---------------------------------------------------------------------------
-# Sample universes
+# Sample universes (real data)
 # ---------------------------------------------------------------------------
 
 
 class TestSampleUniverses:
-    """Tests for synthetic data generators."""
+    """Tests for real data fetchers."""
 
+    @pytest.mark.network
     def test_us_equity_shape(self) -> None:
         df = generate_us_equity_data(days=30)
         assert isinstance(df, pd.DataFrame)
-        # bdate_range may yield 28-30 rows depending on holidays
-        assert 28 <= len(df) <= 30
+        # Real data may have gaps for holidays; expect roughly 20-30 rows
+        assert 15 <= len(df) <= 35, f"Expected 15-35 rows, got {len(df)}"
         assert "Close" in df.columns.get_level_values(1)
 
-    def test_indian_equity_higher_volatility(self) -> None:
+    @pytest.mark.network
+    def test_indian_equity_has_data(self) -> None:
         df = generate_indian_equity_data(days=60)
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) > 10, f"Expected >10 rows, got {len(df)}"
+        # Real Indian equities should have some volatility
         returns = df.xs("Close", level=1, axis=1).pct_change().dropna()
-        annualized_vol = returns.std() * (252**0.5)
-        # Indian equities should be more volatile than US (~30% vs ~20%)
-        assert annualized_vol.mean() > 0.15
+        assert not returns.empty
 
+    @pytest.mark.network
     def test_crypto_data(self) -> None:
         df = generate_crypto_data(days=30)
-        assert len(df) == 30
-        assert "BTC-USD" in df.columns.get_level_values(0)
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) > 10, f"Expected >10 rows, got {len(df)}"
+        # CoinGecko coin IDs are used as column names
+        coin_ids = [c for c in df.columns.get_level_values(0).unique()]
+        assert len(coin_ids) > 0
 
+    @pytest.mark.network
     def test_etf_data(self) -> None:
         df = generate_etf_data(days=30)
         assert "SPY" in df.columns.get_level_values(0)
 
+    @pytest.mark.network
     def test_ohlcv_integrity(self) -> None:
         """High >= max(Open, Close) and Low <= min(Open, Close)."""
         df = generate_us_equity_data(days=30)
@@ -171,6 +184,7 @@ class TestArbitragePipeline:
 class TestRunAllPipelines:
     """Tests for the run_all_pipelines orchestrator."""
 
+    @pytest.mark.network
     def test_runs_all_three(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             results = run_all_pipelines(output_dir=tmpdir)
@@ -180,6 +194,7 @@ class TestRunAllPipelines:
             assert "timestamp" in results
             assert "disclaimer" in results
 
+    @pytest.mark.network
     def test_has_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             results = run_all_pipelines(output_dir=tmpdir)

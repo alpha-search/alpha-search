@@ -723,38 +723,28 @@ class ResearchAgent:
     def analyze_sentiment(self, tickers: list[str]) -> dict:
         """Return sentiment dictionary keyed by ticker.
 
-        When no external FinBERT analyser is injected, falls back to
-        deterministic mock scores so that the swarm can still operate
-        in demo / test mode.
+        Uses a FinBERT-based sentiment analyzer.  If no analyzer is
+        available or it fails, returns an empty dict so the swarm can
+        continue without sentiment data (a warning is logged).
         """
         if self.analyzer is not None and hasattr(self.analyzer, "analyze"):
             try:
                 return self.analyzer.analyze(tickers)
-            except Exception:
-                logger.exception("FinBERT analyser failed — using fallback")
+            except Exception as exc:
+                logger.warning(
+                    "FinBERT sentiment analysis failed: %s. "
+                    "Continuing without sentiment data. "
+                    "Install transformers and torch for sentiment: "
+                    "pip install transformers torch",
+                    exc,
+                )
+                return {}
 
-        # Deterministic fallback based on ticker hash
-        results: Dict[str, dict] = {}
-        for ticker in tickers:
-            h = hash(ticker) % 100
-            if h < 30:
-                direction = "bearish"
-                score = 0.2 + (h % 10) / 100
-            elif h < 70:
-                direction = "neutral"
-                score = 0.4 + (h % 20) / 100
-            else:
-                direction = "bullish"
-                score = 0.6 + (h % 30) / 100
-            results[ticker] = {
-                "ticker": ticker,
-                "direction": direction,
-                "score": round(score, 2),
-                "article_count": 5 + (hash(ticker) % 25),  # 5–29 articles
-                "confidence": "medium" if score > 0.4 else "low",
-                "key_topics": ["earnings", "guidance", "valuation"],
-            }
-        return results
+        logger.warning(
+            "No sentiment analyzer available — continuing without sentiment data. "
+            "Install: pip install transformers torch"
+        )
+        return {}
 
     # -- critique methods ---------------------------------------------------
 

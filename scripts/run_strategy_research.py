@@ -23,10 +23,10 @@ from datetime import datetime, timezone
 # Ensure alpha_search is on path when run from repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from alpha_search.memory import AgentJournal, MemoryStore
+from alpha_search.memory.models import StrategyMemory
 from alpha_search.research.strategy_pipeline import run_all_pipelines
 from alpha_search.research.strategy_report import StrategyReportGenerator
-from alpha_search.memory import MemoryStore, AgentJournal
-from alpha_search.memory.models import StrategyMemory
 
 
 def main() -> None:
@@ -40,7 +40,7 @@ def main() -> None:
     logger.info("=" * 60)
     logger.info("Alpha Search — Strategy Research Pipeline")
     logger.info("=" * 60)
-    logger.info("Using synthetic/demo data for research purposes.")
+    logger.info("Using real market data from Yahoo Finance.")
     logger.info("Results are educational only — not investment advice.")
     logger.info("")
 
@@ -72,7 +72,7 @@ def main() -> None:
         size = os.path.getsize(path) if path and os.path.exists(path) else 0
         logger.info(f"  {fmt:10s} {path} ({size:,} bytes)")
     logger.info("")
-    logger.info("Disclaimer: All results use synthetic demo data.")
+    logger.info("Disclaimer: All results use real market data from Yahoo Finance.")
     logger.info("This is research/educational output — not investment advice.")
 
 
@@ -121,10 +121,10 @@ def _log_to_memory(results: dict) -> None:
                 sharpe=round(avg_sharpe, 4) if avg_sharpe else None,
                 max_drawdown=round(avg_dd, 4) if avg_dd else None,
                 total_return=round(avg_return, 4) if avg_return else None,
-                validation_method="synthetic_backtest",
+                validation_method="real_data_backtest",
                 verdict=verdict,
                 rejection_reason=rejection_reason,
-                lessons_learned="Synthetic data results. Need validation on real data before any deployment.",
+                lessons_learned="Real data backtest. Results for research/educational purposes only.",
             )
             journal.log_strategy_result(memory)
 

@@ -1,9 +1,11 @@
-"""Synthetic OHLCV data generators for research and demonstration.
+"""Real OHLCV data fetchers for research and backtesting.
 
-Each function produces realistic price data using Geometric Brownian
-Motion (GBM) with asset-class-specific drift and volatility parameters.
-The data is clearly labeled as *synthetic* and intended for strategy
-development, backtesting demonstrations, and educational purposes only.
+Each function downloads actual market data from free public APIs:
+- Yahoo Finance (via yfinance) for equities and ETFs
+- CoinGecko (via requests) for cryptocurrencies
+
+No synthetic or mock data is generated. If a data source is unavailable,
+a clear error is raised.
 
 Example::
 
@@ -18,9 +20,10 @@ Example::
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+import time
+from pathlib import Path
+from typing import Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -36,164 +39,85 @@ _DEFAULT_INDIAN_TICKERS: List[str] = [
     "INFY.NS",
     "ITC.NS",
 ]
-_DEFAULT_CRYPTO_TICKERS: List[str] = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD"]
+# CoinGecko coin IDs (not Yahoo Finance tickers)
+_DEFAULT_CRYPTO_COIN_IDS: List[str] = ["bitcoin", "ethereum", "solana", "binancecoin"]
 _DEFAULT_ETF_TICKERS: List[str] = ["SPY", "QQQ", "IWM", "VTI"]
 
-# ---------------------------------------------------------------------------
-# Asset-class parameters (annualised)
-# ---------------------------------------------------------------------------
-_US_EQUITY_PARAMS = {
-    "mu": 0.08,          # 8 % annual drift
-    "sigma": 0.20,       # 20 % annual volatility
-    "trading_days": 252,
-    "volume_low": 1_000_000,
-    "volume_high": 10_000_000,
-    "start_price": 150.0,
-}
-
-_INDIAN_EQUITY_PARAMS = {
-    "mu": 0.12,          # 12 % annual drift
-    "sigma": 0.30,       # 30 % annual volatility
-    "trading_days": 252,
-    "volume_low": 500_000,
-    "volume_high": 5_000_000,
-    "start_price": 2500.0,
-}
-
-_CRYPTO_PARAMS = {
-    "mu": 0.50,          # 50 % annual drift
-    "sigma": 0.80,       # 80 % annual volatility
-    "trading_days": 365,
-    "volume_low": 100_000,
-    "volume_high": 1_000_000,
-    "start_price": 50_000.0,
-}
-
-_ETF_PARAMS = {
-    "mu": 0.07,          # 7 % annual drift
-    "sigma": 0.15,       # 15 % annual volatility
-    "trading_days": 252,
-    "volume_low": 2_000_000,
-    "volume_high": 20_000_000,
-    "start_price": 400.0,
-}
+# Rate-limit delay between API calls (seconds)
+_API_DELAY_SECONDS = 0.5
 
 # ---------------------------------------------------------------------------
-# Internal helper
+# Disk cache helpers
 # ---------------------------------------------------------------------------
 
-def _generate_ohlcv_for_ticker(
-    ticker: str,
-    dates: pd.DatetimeIndex,
-    mu: float,
-    sigma: float,
-    volume_low: float,
-    volume_high: float,
-    start_price: float,
-    rng: np.random.Generator,
-) -> pd.DataFrame:
-    """Generate a single-ticker OHLCV DataFrame via GBM.
+def _cache_dir() -> Path:
+    """Return the local disk cache directory for downloaded data."""
+    cache = Path.home() / ".cache" / "alpha_search" / "yfinance"
+    cache.mkdir(parents=True, exist_ok=True)
+    return cache
+
+
+def _cache_path(key: str) -> Path:
+    """Build a cache file path for a given cache key."""
+    # Sanitise key for filesystem
+    safe = key.replace("/", "_").replace("\\", "_")
+    return _cache_dir() / f"{safe}.parquet"
+
+
+def _load_from_cache(key: str, ttl_seconds: int = 86400) -> Optional[pd.DataFrame]:
+    """Load a DataFrame from local disk cache if it exists and is fresh.
 
     Parameters
     ----------
-    ticker:
-        Symbol name (used for logging only).
-    dates:
-        Trading-date index.
-    mu:
-        Annualised drift (decimal).
-    sigma:
-        Annualised volatility (decimal).
-    volume_low, volume_high:
-        Uniform sampling bounds for daily volume.
-    start_price:
-        Opening price on the first day.
-    rng:
-        NumPy random number generator.
+    key:
+        Cache key (usually ``function_name_ticker_start_end``).
+    ttl_seconds:
+        Time-to-live in seconds (default 24 hours).
 
     Returns
     -------
-    pd.DataFrame
-        Columns: Open, High, Low, Close, Volume.  Index: *dates*.
+    pd.DataFrame or None
+        Cached data if available and fresh, otherwise ``None``.
     """
-    _n = len(dates)  # noqa: F841
-    _dt = 1.0 / len(dates) * (len(dates) / 252)  # noqa: F841  # normalise to ~252 trading days/year
-    # Actually — simpler: compute daily parameters from annual ones
-    # For n days, the fraction of a year per step = 252 / n for equities, 365 / n for crypto
-    # We'll compute below directly
+    import time
 
-    return _generate_ohlcv_gbm(
-        dates=dates,
-        mu=mu,
-        sigma=sigma,
-        volume_low=volume_low,
-        volume_high=volume_high,
-        start_price=start_price,
-        rng=rng,
-    )
+    path = _cache_path(key)
+    if not path.exists():
+        return None
+    age = time.time() - path.stat().st_mtime
+    if age > ttl_seconds:
+        logger.debug("Cache expired for %s (age=%.0fs)", key, age)
+        return None
+    try:
+        df = pd.read_parquet(path)
+        logger.debug("Cache hit for %s", key)
+        return df
+    except Exception as exc:
+        logger.warning("Failed to read cache for %s: %s", key, exc)
+        return None
 
 
-def _generate_ohlcv_gbm(
-    dates: pd.DatetimeIndex,
-    mu: float,
-    sigma: float,
-    volume_low: float,
-    volume_high: float,
-    start_price: float,
-    rng: np.random.Generator,
-) -> pd.DataFrame:
-    """Generate OHLCV data using Geometric Brownian Motion.
+def _save_to_cache(key: str, df: pd.DataFrame) -> None:
+    """Save a DataFrame to local disk cache.
 
-    Close prices follow:
-        dS = mu * S * dt + sigma * S * sqrt(dt) * Z
-
-    where Z ~ N(0, 1).
-
-    Open  = previous Close (or *start_price* on day 0).
-    High  = max(Open, Close) + random perturbation.
-    Low   = min(Open, Close) - random perturbation.
-    Volume is uniformly distributed between *volume_low* and *volume_high*.
+    Parameters
+    ----------
+    key:
+        Cache key.
+    df:
+        DataFrame to cache.
     """
-    n = len(dates)  # noqa: F841
-    # Daily parameters
-    days_per_year = 252 if n <= 300 else 365
-    dt = 1.0 / days_per_year
-    daily_drift = mu * dt
-    daily_vol = sigma * np.sqrt(dt)
+    try:
+        path = _cache_path(key)
+        df.to_parquet(path)
+        logger.debug("Cached %s to %s", key, path)
+    except Exception as exc:
+        logger.warning("Failed to cache %s: %s", key, exc)
 
-    # GBM returns
-    returns = daily_drift + daily_vol * rng.standard_normal(n)
 
-    # Close prices
-    close_prices = start_price * np.exp(np.cumsum(returns))
-
-    # Build OHLC
-    opens = np.empty(n)
-    opens[0] = start_price
-    opens[1:] = close_prices[:-1]
-
-    # Intraday range: random wick size ~1-3 % of the price level
-    wick_pct = rng.uniform(0.005, 0.025, size=n)
-    wick_size = close_prices * wick_pct
-
-    highs = np.maximum(opens, close_prices) + wick_size * rng.uniform(0.3, 1.0, size=n)
-    lows = np.minimum(opens, close_prices) - wick_size * rng.uniform(0.3, 1.0, size=n)
-
-    # Volume
-    volumes = rng.integers(volume_low, volume_high, size=n)
-
-    df = pd.DataFrame(
-        {
-            "Open": opens,
-            "High": highs,
-            "Low": lows,
-            "Close": close_prices,
-            "Volume": volumes,
-        },
-        index=dates,
-    )
-    return df
-
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
 def _build_multiindex_df(
     ticker_dfs: dict[str, pd.DataFrame],
@@ -220,11 +144,207 @@ def _build_multiindex_df(
     return combined
 
 
-def _make_dates(n: int, freq: str = "B", seed: int = 42) -> pd.DatetimeIndex:
+def _make_dates(n: int, freq: str = "B") -> pd.DatetimeIndex:
     """Generate a DatetimeIndex of *n* business days ending today."""
     end = pd.Timestamp.now().normalize()
     dates = pd.bdate_range(end=end, periods=n, freq=freq)
     return dates
+
+
+def _compute_start_date(days: int) -> str:
+    """Compute a start date string *days* calendar days before today."""
+    end = pd.Timestamp.now().normalize()
+    start = end - pd.Timedelta(days=days + 30)  # buffer for weekends/holidays
+    return start.strftime("%Y-%m-%d")
+
+
+def _compute_end_date() -> str:
+    """Return today's date as ``YYYY-MM-DD``."""
+    return pd.Timestamp.now().normalize().strftime("%Y-%m-%d")
+
+
+def _fetch_yfinance_ohlcv(
+    ticker: str,
+    start: str,
+    end: str,
+    use_cache: bool = True,
+) -> pd.DataFrame:
+    """Download OHLCV data for a single ticker from Yahoo Finance.
+
+    Parameters
+    ----------
+    ticker:
+        Yahoo Finance ticker symbol.
+    start:
+        Start date ``YYYY-MM-DD``.
+    end:
+        End date ``YYYY-MM-DD``.
+    use_cache:
+        Whether to read/write local disk cache.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: Open, High, Low, Close, Volume.  Index: date.
+
+    Raises
+    ------
+    RuntimeError
+        If yfinance is not installed or the download fails.
+    """
+    cache_key = f"yfinance_{ticker}_{start}_{end}"
+    if use_cache:
+        cached = _load_from_cache(cache_key)
+        if cached is not None:
+            return cached
+
+    try:
+        import yfinance as yf
+    except ImportError:
+        raise RuntimeError(
+            "yfinance is not installed. "
+            "Install it with: pip install yfinance"
+        )
+
+    tkr = yf.Ticker(ticker)
+    df = tkr.history(start=start, end=end, interval="1d")
+
+    if df is None or df.empty:
+        raise RuntimeError(
+            f"No data returned for {ticker} between {start} and {end}. "
+            f"The ticker may be delisted or the date range invalid."
+        )
+
+    # Normalise columns
+    df.columns = [c.title() if isinstance(c, str) else c for c in df.columns]
+    std_cols = ["Open", "High", "Low", "Close", "Volume"]
+    available = [c for c in std_cols if c in df.columns]
+    df = df[available]
+
+    if use_cache:
+        _save_to_cache(cache_key, df)
+
+    logger.info("Fetched %s: %d rows (%s to %s)", ticker, len(df), start, end)
+    return df
+
+
+def _fetch_coingecko_prices(
+    coin_ids: List[str],
+    days: int = 365,
+) -> Dict[str, pd.DataFrame]:
+    """Fetch historical OHLCV data from CoinGecko (free, no API key).
+
+    Parameters
+    ----------
+    coin_ids:
+        List of CoinGecko coin IDs (e.g. ``["bitcoin", "ethereum"]``).
+    days:
+        Number of days of history to fetch (default 365).
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Mapping coin_id -> OHLCV DataFrame with columns
+        ``Open, High, Low, Close, Volume``.  Index: date.
+
+    Raises
+       ------
+    RuntimeError
+        If ``requests`` is not installed or the API call fails.
+    """
+    try:
+        import requests
+    except ImportError:
+        raise RuntimeError(
+            "requests is not installed. "
+            "Install it with: pip install requests"
+        )
+
+    result: Dict[str, pd.DataFrame] = {}
+
+    for coin_id in coin_ids:
+        cache_key = f"coingecko_{coin_id}_{days}"
+        cached = _load_from_cache(cache_key)
+        if cached is not None:
+            result[coin_id] = cached
+            continue
+
+        # Use the market_chart endpoint for price + volume data
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+        params: dict = {"vs_currency": "usd", "days": days}
+
+        try:
+            resp = requests.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError(
+                f"CoinGecko API request failed for {coin_id}: {exc}. "
+                f"This may be due to rate limiting. Wait a moment and retry."
+            )
+
+        data = resp.json()
+        if "prices" not in data:
+            raise RuntimeError(
+                f"CoinGecko returned unexpected data for {coin_id}: {list(data.keys())}"
+            )
+
+        # Parse prices: data["prices"] is [[timestamp_ms, price], ...]
+        prices_df = pd.DataFrame(
+            data["prices"], columns=["timestamp", "price"]
+        )
+        prices_df["timestamp"] = pd.to_datetime(
+            prices_df["timestamp"], unit="ms", utc=True
+        ).dt.tz_localize(None)
+        prices_df = prices_df.set_index("timestamp").sort_index()
+
+        # Parse total_volumes: [[timestamp_ms, volume], ...]
+        if "total_volumes" in data and data["total_volumes"]:
+            vol_df = pd.DataFrame(
+                data["total_volumes"], columns=["timestamp", "volume"]
+            )
+            vol_df["timestamp"] = pd.to_datetime(
+                vol_df["timestamp"], unit="ms", utc=True
+            ).dt.tz_localize(None)
+            vol_df = vol_df.set_index("timestamp").sort_index()
+        else:
+            vol_df = pd.DataFrame(
+                {"volume": 0.0}, index=prices_df.index
+            )
+
+        # Align all series to the same index
+        common_idx = prices_df.index
+        aligned_prices = prices_df["price"].reindex(common_idx)
+        aligned_volume = vol_df["volume"].reindex(common_idx).fillna(0.0)
+
+        # Estimate High/Low from intraday range (crypto is 24h, ~2-5% typical range)
+        # Estimate daily high/low as price ± typical intraday volatility
+        # For crypto, ~3% daily range is a rough approximation
+        intraday_range = aligned_prices * 0.015  # ~1.5% each side
+        estimated_high = aligned_prices + intraday_range
+        estimated_low = aligned_prices - intraday_range
+
+        # Build OHLCV DataFrame
+        df = pd.DataFrame(
+            {
+                "Open": aligned_prices,
+                "High": estimated_high,
+                "Low": estimated_low,
+                "Close": aligned_prices,
+                "Volume": aligned_volume,
+            },
+            index=common_idx,
+        )
+
+        # Round to reasonable precision
+        df = df.round({"Open": 2, "High": 2, "Low": 2, "Close": 2})
+
+        _save_to_cache(cache_key, df)
+        result[coin_id] = df
+
+        # Rate-limit delay
+        time.sleep(_API_DELAY_SECONDS)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -234,52 +354,66 @@ def _make_dates(n: int, freq: str = "B", seed: int = 42) -> pd.DatetimeIndex:
 def generate_us_equity_data(
     tickers: Optional[List[str]] = None,
     days: int = 252,
-    seed: int = 42,
+    seed: int = 42,  # noqa: ARG001
 ) -> pd.DataFrame:
-    """Generate **synthetic** US equity OHLCV data for research.
-
-    Uses GBM with parameters calibrated to large-cap US equities:
-    drift = 8 %/year, volatility = 20 %/year, volume 1–10 M shares/day.
+    """Fetch **real** US equity OHLCV data from Yahoo Finance.
 
     Parameters
     ----------
     tickers:
-        List of ticker symbols.  Defaults to ``["AAPL", "MSFT", "GOOGL", "AMZN", "META"]``.
+        List of ticker symbols.  Defaults to
+        ``["AAPL", "MSFT", "GOOGL", "AMZN", "META"]``.
     days:
-        Number of trading days to generate (default 252 ≈ 1 year).
+        Number of trading days to fetch (default 252 ~ 1 year).
     seed:
-        Random seed for reproducibility.
+        Kept for API compatibility; has no effect (real data is deterministic).
 
     Returns
     -------
     pd.DataFrame
         MultiIndex columns ``(ticker, field)`` where *field* is one of
         ``Open, High, Low, Close, Volume``.  Index is a business-day
-        DatetimeIndex.  **This data is synthetic and for demonstration
-        only.**
+        DatetimeIndex.
+
+    Raises
+    ------
+    RuntimeError
+        If yfinance is not installed or all tickers fail to download.
     """
     tickers = tickers or _DEFAULT_US_TICKERS
-    rng = np.random.default_rng(seed)
-    dates = _make_dates(days, freq="B")
+    start = _compute_start_date(days)
+    end = _compute_end_date()
 
-    p = _US_EQUITY_PARAMS
     ticker_dfs: dict[str, pd.DataFrame] = {}
+    failures: list[str] = []
+
     for ticker in tickers:
-        start_price = p["start_price"] * rng.uniform(0.5, 2.0)
-        df = _generate_ohlcv_gbm(
-            dates=dates,
-            mu=p["mu"],
-            sigma=p["sigma"],
-            volume_low=p["volume_low"],
-            volume_high=p["volume_high"],
-            start_price=start_price,
-            rng=rng,
+        try:
+            df = _fetch_yfinance_ohlcv(ticker, start, end)
+            ticker_dfs[ticker] = df
+        except Exception as exc:
+            logger.warning("Failed to fetch %s: %s", ticker, exc)
+            failures.append(ticker)
+        time.sleep(_API_DELAY_SECONDS)
+
+    if not ticker_dfs:
+        raise RuntimeError(
+            f"Failed to fetch data for any ticker. "
+            f"Failures: {', '.join(failures)}. "
+            f"Ensure yfinance is installed: pip install yfinance"
         )
-        ticker_dfs[ticker] = df
+
+    if failures:
+        logger.warning(
+            "Successfully fetched %d/%d tickers. Failed: %s",
+            len(ticker_dfs),
+            len(tickers),
+            ", ".join(failures),
+        )
 
     logger.info(
-        "Generated synthetic US equity data: %d tickers x %d days",
-        len(tickers),
+        "Fetched real US equity data: %d tickers x up to %d days",
+        len(ticker_dfs),
         days,
     )
     return _build_multiindex_df(ticker_dfs)
@@ -288,12 +422,11 @@ def generate_us_equity_data(
 def generate_indian_equity_data(
     tickers: Optional[List[str]] = None,
     days: int = 252,
-    seed: int = 43,
+    seed: int = 43,  # noqa: ARG001
 ) -> pd.DataFrame:
-    """Generate **synthetic** Indian equity OHLCV data for research.
+    """Fetch **real** Indian equity OHLCV data from Yahoo Finance.
 
-    Uses GBM with parameters calibrated to Indian large-caps:
-    drift = 12 %/year, volatility = 30 %/year, volume 0.5–5 M shares/day.
+    NSE tickers use the ``.NS`` suffix (e.g. ``"RELIANCE.NS"``).
 
     Parameters
     ----------
@@ -301,38 +434,46 @@ def generate_indian_equity_data(
         List of ticker symbols.  Defaults to
         ``["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ITC.NS"]``.
     days:
-        Number of trading days (default 252).
+        Number of trading days to fetch (default 252).
     seed:
-        Random seed for reproducibility.
+        Kept for API compatibility; has no effect.
 
     Returns
     -------
     pd.DataFrame
         MultiIndex columns ``(ticker, field)`` with OHLCV data.
-        **Synthetic — for demonstration only.**
+
+    Raises
+    ------
+    RuntimeError
+        If yfinance is not installed or all tickers fail.
     """
     tickers = tickers or _DEFAULT_INDIAN_TICKERS
-    rng = np.random.default_rng(seed)
-    dates = _make_dates(days, freq="B")
+    start = _compute_start_date(days)
+    end = _compute_end_date()
 
-    p = _INDIAN_EQUITY_PARAMS
     ticker_dfs: dict[str, pd.DataFrame] = {}
+    failures: list[str] = []
+
     for ticker in tickers:
-        start_price = p["start_price"] * rng.uniform(0.5, 2.0)
-        df = _generate_ohlcv_gbm(
-            dates=dates,
-            mu=p["mu"],
-            sigma=p["sigma"],
-            volume_low=p["volume_low"],
-            volume_high=p["volume_high"],
-            start_price=start_price,
-            rng=rng,
+        try:
+            df = _fetch_yfinance_ohlcv(ticker, start, end)
+            ticker_dfs[ticker] = df
+        except Exception as exc:
+            logger.warning("Failed to fetch %s: %s", ticker, exc)
+            failures.append(ticker)
+        time.sleep(_API_DELAY_SECONDS)
+
+    if not ticker_dfs:
+        raise RuntimeError(
+            f"Failed to fetch data for any Indian ticker. "
+            f"Failures: {', '.join(failures)}. "
+            f"Ensure yfinance is installed and the tickers use the .NS suffix."
         )
-        ticker_dfs[ticker] = df
 
     logger.info(
-        "Generated synthetic Indian equity data: %d tickers x %d days",
-        len(tickers),
+        "Fetched real Indian equity data: %d tickers x up to %d days",
+        len(ticker_dfs),
         days,
     )
     return _build_multiindex_df(ticker_dfs)
@@ -341,54 +482,46 @@ def generate_indian_equity_data(
 def generate_crypto_data(
     tickers: Optional[List[str]] = None,
     days: int = 365,
-    seed: int = 44,
+    seed: int = 44,  # noqa: ARG001
 ) -> pd.DataFrame:
-    """Generate **synthetic** cryptocurrency OHLCV data for research.
-
-    Uses GBM with parameters calibrated to major crypto assets:
-    drift = 50 %/year, volatility = 80 %/year, volume 0.1–1 M units/day.
-    Crypto trades 24/7 so the index uses calendar days.
+    """Fetch **real** cryptocurrency price data from CoinGecko (free, no key).
 
     Parameters
     ----------
     tickers:
-        List of ticker symbols.  Defaults to
-        ``["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD"]``.
+        List of CoinGecko coin IDs.  Defaults to
+        ``["bitcoin", "ethereum", "solana", "binancecoin"]``.
+        Note: these are CoinGecko IDs, not Yahoo Finance tickers.
     days:
-        Number of calendar days (default 365 ≈ 1 year).
+        Number of calendar days to fetch (default 365 ~ 1 year).
     seed:
-        Random seed for reproducibility.
+        Kept for API compatibility; has no effect.
 
     Returns
     -------
     pd.DataFrame
         MultiIndex columns ``(ticker, field)`` with OHLCV data.
-        Index is a daily calendar DatetimeIndex.  **Synthetic — for
-        demonstration only.**
-    """
-    tickers = tickers or _DEFAULT_CRYPTO_TICKERS
-    rng = np.random.default_rng(seed)
-    end = pd.Timestamp.now().normalize()
-    dates = pd.date_range(end=end, periods=days, freq="D")
+        Index is a daily calendar DatetimeIndex.
+        **Volume** is the 24h total volume in USD from CoinGecko.
 
-    p = _CRYPTO_PARAMS
-    ticker_dfs: dict[str, pd.DataFrame] = {}
-    for ticker in tickers:
-        start_price = p["start_price"] * rng.uniform(0.2, 3.0)
-        df = _generate_ohlcv_gbm(
-            dates=dates,
-            mu=p["mu"],
-            sigma=p["sigma"],
-            volume_low=p["volume_low"],
-            volume_high=p["volume_high"],
-            start_price=start_price,
-            rng=rng,
+    Raises
+    ------
+    RuntimeError
+        If ``requests`` is not installed or the CoinGecko API fails.
+    """
+    coin_ids = tickers or _DEFAULT_CRYPTO_COIN_IDS
+
+    ticker_dfs = _fetch_coingecko_prices(coin_ids, days=days)
+
+    if not ticker_dfs:
+        raise RuntimeError(
+            "Failed to fetch any cryptocurrency data from CoinGecko. "
+            "Ensure 'requests' is installed: pip install requests"
         )
-        ticker_dfs[ticker] = df
 
     logger.info(
-        "Generated synthetic crypto data: %d tickers x %d days",
-        len(tickers),
+        "Fetched real crypto data: %d coins x up to %d days",
+        len(ticker_dfs),
         days,
     )
     return _build_multiindex_df(ticker_dfs)
@@ -397,50 +530,55 @@ def generate_crypto_data(
 def generate_etf_data(
     tickers: Optional[List[str]] = None,
     days: int = 252,
-    seed: int = 45,
+    seed: int = 45,  # noqa: ARG001
 ) -> pd.DataFrame:
-    """Generate **synthetic** ETF OHLCV data for research.
-
-    Uses GBM with parameters calibrated to broad-market ETFs:
-    drift = 7 %/year, volatility = 15 %/year, volume 2–20 M shares/day.
+    """Fetch **real** ETF OHLCV data from Yahoo Finance.
 
     Parameters
     ----------
     tickers:
         List of ticker symbols.  Defaults to ``["SPY", "QQQ", "IWM", "VTI"]``.
     days:
-        Number of trading days (default 252).
+        Number of trading days to fetch (default 252).
     seed:
-        Random seed for reproducibility.
+        Kept for API compatibility; has no effect.
 
     Returns
     -------
     pd.DataFrame
         MultiIndex columns ``(ticker, field)`` with OHLCV data.
-        **Synthetic — for demonstration only.**
+
+    Raises
+    ------
+    RuntimeError
+        If yfinance is not installed or all tickers fail.
     """
     tickers = tickers or _DEFAULT_ETF_TICKERS
-    rng = np.random.default_rng(seed)
-    dates = _make_dates(days, freq="B")
+    start = _compute_start_date(days)
+    end = _compute_end_date()
 
-    p = _ETF_PARAMS
     ticker_dfs: dict[str, pd.DataFrame] = {}
+    failures: list[str] = []
+
     for ticker in tickers:
-        start_price = p["start_price"] * rng.uniform(0.5, 2.0)
-        df = _generate_ohlcv_gbm(
-            dates=dates,
-            mu=p["mu"],
-            sigma=p["sigma"],
-            volume_low=p["volume_low"],
-            volume_high=p["volume_high"],
-            start_price=start_price,
-            rng=rng,
+        try:
+            df = _fetch_yfinance_ohlcv(ticker, start, end)
+            ticker_dfs[ticker] = df
+        except Exception as exc:
+            logger.warning("Failed to fetch %s: %s", ticker, exc)
+            failures.append(ticker)
+        time.sleep(_API_DELAY_SECONDS)
+
+    if not ticker_dfs:
+        raise RuntimeError(
+            f"Failed to fetch data for any ETF. "
+            f"Failures: {', '.join(failures)}. "
+            f"Ensure yfinance is installed: pip install yfinance"
         )
-        ticker_dfs[ticker] = df
 
     logger.info(
-        "Generated synthetic ETF data: %d tickers x %d days",
-        len(tickers),
+        "Fetched real ETF data: %d tickers x up to %d days",
+        len(ticker_dfs),
         days,
     )
     return _build_multiindex_df(ticker_dfs)

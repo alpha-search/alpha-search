@@ -72,13 +72,19 @@ class FinBERTSentimentAnalyzer(SentimentAnalyzer):
         Returns:
             Dict with ``positive``, ``negative``, ``neutral`` probabilities
             and a composite ``score`` in ``[-1, 1]``.
+
+        Raises:
+            RuntimeError: If FinBERT is not available.
         """
         if not text or not text.strip():
             return {"positive": 0.0, "negative": 0.0, "neutral": 1.0, "score": 0.0}
 
         if self._available and self._pipeline is not None:
             return self._analyze_with_model(text)
-        return self._fallback_analyze(text)
+        raise RuntimeError(
+            "FinBERT model is not available. "
+            "Install transformers and torch: pip install transformers torch"
+        )
 
     def analyze_batch(self, texts: List[str]) -> List[Dict[str, float]]:
         """Analyze a batch of texts efficiently."""
@@ -90,9 +96,15 @@ class FinBERTSentimentAnalyzer(SentimentAnalyzer):
                 results = self._pipeline(texts, truncation=True, max_length=512)
                 return [self._parse_pipeline_result(r) for r in results]
             except Exception as exc:
-                logger.warning("Batch analysis failed: %s. Falling back to loop.", exc)
+                raise RuntimeError(
+                    f"FinBERT batch analysis failed: {exc}. "
+                    f"Install transformers and torch: pip install transformers torch"
+                ) from exc
 
-        return [self.analyze(t) for t in texts]
+        raise RuntimeError(
+            "FinBERT model is not available. "
+            "Install transformers and torch: pip install transformers torch"
+        )
 
     # -- Internal helpers -----------------------------------------------
 
@@ -102,8 +114,10 @@ class FinBERTSentimentAnalyzer(SentimentAnalyzer):
             result = self._pipeline(text, truncation=True, max_length=512)
             return self._parse_pipeline_result(result[0])
         except Exception as exc:
-            logger.warning("Model inference failed: %s. Using fallback.", exc)
-            return self._fallback_analyze(text)
+            raise RuntimeError(
+                f"FinBERT model inference failed: {exc}. "
+                f"The model may need to be re-downloaded."
+            ) from exc
 
     def _parse_pipeline_result(self, result) -> Dict[str, float]:
         """Parse the HuggingFace pipeline output to our standard format."""
@@ -134,44 +148,4 @@ class FinBERTSentimentAnalyzer(SentimentAnalyzer):
                 "score": 0.0,
             }
 
-    def _fallback_analyze(self, text: str) -> Dict[str, float]:
-        """Simple keyword-based fallback when FinBERT is unavailable."""
-        text_lower = text.lower()
 
-        positive_words = {
-            "strong", "growth", "profit", "gain", "up", "rise", "bullish",
-            " outperform", "beat", "exceed", "positive", "optimistic",
-            "recovery", "rally", "surge", "boom", "expansion",
-        }
-        negative_words = {
-            "weak", "loss", "decline", "down", "fall", "bearish",
-            "underperform", "miss", "below", "negative", "pessimistic",
-            "recession", "crash", "drop", "slump", "contraction",
-            "risk", "debt", "bankruptcy", "lawsuit", "fraud",
-        }
-
-        pos_count = sum(1 for w in positive_words if w in text_lower)
-        neg_count = sum(1 for w in negative_words if w in text_lower)
-        total = pos_count + neg_count
-
-        if total == 0:
-            return {"positive": 0.33, "negative": 0.33, "neutral": 0.34, "score": 0.0}
-
-        pos_prob = pos_count / total
-        neg_prob = neg_count / total
-        neutral_prob = max(0.0, 1.0 - pos_prob - neg_prob)
-
-        # Normalize to sum to 1
-        total_prob = pos_prob + neg_prob + neutral_prob
-        pos_prob /= total_prob
-        neg_prob /= total_prob
-        neutral_prob /= total_prob
-
-        score = pos_prob - neg_prob
-
-        return {
-            "positive": round(pos_prob, 4),
-            "negative": round(neg_prob, 4),
-            "neutral": round(neutral_prob, 4),
-            "score": round(score, 4),
-        }
