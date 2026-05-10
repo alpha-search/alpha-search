@@ -426,10 +426,11 @@ class MemoryStore:
             limit: Maximum number of records.
 
         Returns:
-            MemoryRecord objects with memory_type='blocker'.
+            MemoryRecord objects with memory_type='blocker' and status='active'.
         """
         return self.get_memories(
             memory_type="blocker",
+            status="active",
             limit=limit,
         )
 

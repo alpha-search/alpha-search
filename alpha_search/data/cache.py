@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
-import pickle
 import time
 from typing import Optional
 
@@ -63,20 +62,17 @@ class CacheManager:
         return hashlib.sha256(key.encode()).hexdigest()
 
     def _serialize(self, data: pd.DataFrame) -> bytes:
-        """Serialize DataFrame to bytes. Uses parquet if pyarrow is available,
-        otherwise falls back to pickle."""
-        try:
-            return data.to_parquet()
-        except Exception:
-            # pyarrow/fastparquet not available — use pickle
-            return pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
+        """Serialize DataFrame to parquet bytes."""
+        return data.to_parquet()
 
     def _deserialize(self, blob: bytes) -> pd.DataFrame:
-        """Deserialize bytes to DataFrame. Auto-detects parquet vs pickle."""
-        # Parquet files start with magic bytes "PAR1"
-        if blob[:4] == b"PAR1":
-            return pd.read_parquet(io.BytesIO(blob))
-        return pickle.loads(blob)
+        """Deserialize parquet bytes to DataFrame."""
+        if blob[:4] != b"PAR1":
+            raise ValueError(
+                "Cache blob is not valid parquet format. Cache may be corrupted or"
+                " was written by an older version. Clear the cache and retry."
+            )
+        return pd.read_parquet(io.BytesIO(blob))
 
     def set(self, key: str, data: pd.DataFrame, ttl: int = 86400) -> None:
         """Store *data* under *key* with a time-to-live in seconds.
