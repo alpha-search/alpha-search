@@ -34,7 +34,10 @@ class TestSampleUniverses:
 
     @pytest.mark.network
     def test_us_equity_shape(self) -> None:
-        df = generate_us_equity_data(days=30)
+        try:
+            df = generate_us_equity_data(days=30)
+        except RuntimeError as exc:
+            pytest.skip(f"yfinance rate-limited in CI: {exc}")
         assert isinstance(df, pd.DataFrame)
         # Real data may have gaps for holidays; expect roughly 20-30 rows
         assert 15 <= len(df) <= 35, f"Expected 15-35 rows, got {len(df)}"
@@ -42,7 +45,10 @@ class TestSampleUniverses:
 
     @pytest.mark.network
     def test_indian_equity_has_data(self) -> None:
-        df = generate_indian_equity_data(days=60)
+        try:
+            df = generate_indian_equity_data(days=60)
+        except RuntimeError as exc:
+            pytest.skip(f"yfinance rate-limited in CI: {exc}")
         assert isinstance(df, pd.DataFrame)
         assert len(df) > 10, f"Expected >10 rows, got {len(df)}"
         # Real Indian equities should have some volatility
@@ -51,7 +57,10 @@ class TestSampleUniverses:
 
     @pytest.mark.network
     def test_crypto_data(self) -> None:
-        df = generate_crypto_data(days=30)
+        try:
+            df = generate_crypto_data(days=30)
+        except RuntimeError as exc:
+            pytest.skip(f"CoinGecko unavailable in CI: {exc}")
         assert isinstance(df, pd.DataFrame)
         assert len(df) > 10, f"Expected >10 rows, got {len(df)}"
         # CoinGecko coin IDs are used as column names
@@ -60,13 +69,19 @@ class TestSampleUniverses:
 
     @pytest.mark.network
     def test_etf_data(self) -> None:
-        df = generate_etf_data(days=30)
+        try:
+            df = generate_etf_data(days=30)
+        except RuntimeError as exc:
+            pytest.skip(f"yfinance rate-limited in CI: {exc}")
         assert "SPY" in df.columns.get_level_values(0)
 
     @pytest.mark.network
     def test_ohlcv_integrity(self) -> None:
         """High >= max(Open, Close) and Low <= min(Open, Close)."""
-        df = generate_us_equity_data(days=30)
+        try:
+            df = generate_us_equity_data(days=30)
+        except RuntimeError as exc:
+            pytest.skip(f"yfinance rate-limited in CI: {exc}")
         for ticker in df.columns.get_level_values(0).unique():
             subset = df[ticker]
             assert (subset["High"] >= subset["Open"]).all()
@@ -80,12 +95,40 @@ class TestSampleUniverses:
 # ---------------------------------------------------------------------------
 
 
+def _make_test_prices(
+    tickers: list[str] = None,
+    days: int = 100,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Create deterministic OHLCV prices for pipeline tests (no API calls)."""
+    import numpy as np
+
+    tickers = tickers or ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+    rng = np.random.default_rng(seed)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=days, freq="B")
+    data: dict[tuple[str, str], pd.Series] = {}
+    for t in tickers:
+        returns = rng.normal(0.0003, 0.015, days)
+        close = 100.0 * np.cumprod(1 + returns)
+        noise = rng.uniform(0.005, 0.02, days)
+        data[(t, "Close")] = pd.Series(close, index=dates)
+        data[(t, "High")] = pd.Series(close * (1 + noise), index=dates)
+        data[(t, "Low")] = pd.Series(close * (1 - noise), index=dates)
+        data[(t, "Open")] = pd.Series(close + rng.normal(0, 0.5, days), index=dates)
+        data[(t, "Volume")] = pd.Series(
+            rng.integers(1_000_000, 10_000_000, days), index=dates
+        )
+    df = pd.DataFrame(data)
+    df.columns.names = ["ticker", "field"]
+    return df
+
+
 class TestMomentumPipeline:
     """Tests for MomentumPipeline."""
 
     @pytest.fixture
     def pipeline(self) -> MomentumPipeline:
-        df = generate_us_equity_data(days=100, seed=42)
+        df = _make_test_prices(days=100, seed=42)
         tickers = list(df.columns.get_level_values(0).unique())[:3]
         return MomentumPipeline(prices=df, tickers=tickers, capital=100_000.0)
 
@@ -136,7 +179,7 @@ class TestMeanReversionPipeline:
 
     @pytest.fixture
     def pipeline(self) -> MeanReversionPipeline:
-        df = generate_us_equity_data(days=100, seed=43)
+        df = _make_test_prices(days=100, seed=43)
         tickers = list(df.columns.get_level_values(0).unique())[:3]
         return MeanReversionPipeline(prices=df, tickers=tickers, capital=100_000.0)
 
@@ -161,7 +204,7 @@ class TestArbitragePipeline:
 
     @pytest.fixture
     def pipeline(self) -> ArbitragePipeline:
-        df = generate_us_equity_data(days=100, seed=44)
+        df = _make_test_prices(days=100, seed=44)
         tickers = list(df.columns.get_level_values(0).unique())[:4]
         return ArbitragePipeline(prices=df, tickers=tickers, capital=100_000.0)
 
@@ -187,7 +230,10 @@ class TestRunAllPipelines:
     @pytest.mark.network
     def test_runs_all_three(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            results = run_all_pipelines(output_dir=tmpdir)
+            try:
+                results = run_all_pipelines(output_dir=tmpdir)
+            except RuntimeError as exc:
+                pytest.skip(f"yfinance rate-limited in CI: {exc}")
             assert "momentum" in results
             assert "mean_reversion" in results
             assert "arbitrage" in results
@@ -197,6 +243,9 @@ class TestRunAllPipelines:
     @pytest.mark.network
     def test_has_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            results = run_all_pipelines(output_dir=tmpdir)
+            try:
+                results = run_all_pipelines(output_dir=tmpdir)
+            except RuntimeError as exc:
+                pytest.skip(f"yfinance rate-limited in CI: {exc}")
             for key in ("momentum", "mean_reversion", "arbitrage"):
                 assert "metrics" in results[key] or "backtests" in results[key]

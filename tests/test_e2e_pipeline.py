@@ -25,8 +25,40 @@ from alpha_search.backtest.costs import CostModel
 from alpha_search.backtest.engine import BacktestEngine
 from alpha_search.memory.models import MemoryRecord
 from alpha_search.memory.store import MemoryStore
-from alpha_search.research.sample_universes import generate_us_equity_data
 from alpha_search.research.strategy_pipeline import MeanReversionPipeline, MomentumPipeline
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_test_prices(
+    tickers: list[str],
+    days: int = 200,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Create deterministic OHLCV prices for testing (no API calls)."""
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=days, freq="B")
+    data: dict[tuple[str, str], pd.Series] = {}
+    for t in tickers:
+        # GBM with slight positive drift
+        returns = rng.normal(0.0003, 0.015, days)
+        close = 100.0 * np.cumprod(1 + returns)
+        noise = rng.uniform(0.005, 0.02, days)
+        data[(t, "Close")] = pd.Series(close, index=dates)
+        data[(t, "High")] = pd.Series(close * (1 + noise), index=dates)
+        data[(t, "Low")] = pd.Series(close * (1 - noise), index=dates)
+        data[(t, "Open")] = pd.Series(close + rng.normal(0, 0.5, days), index=dates)
+        data[(t, "Volume")] = pd.Series(
+            rng.integers(1_000_000, 10_000_000, days), index=dates
+        )
+    df = pd.DataFrame(data)
+    df.columns.names = ["ticker", "field"]
+    return df
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -35,8 +67,8 @@ from alpha_search.research.strategy_pipeline import MeanReversionPipeline, Momen
 
 @pytest.fixture(scope="module")
 def synthetic_prices() -> pd.DataFrame:
-    """200 days of synthetic US equity data for 5 tickers."""
-    return generate_us_equity_data(
+    """200 days of deterministic test equity data for 5 tickers."""
+    return _make_test_prices(
         tickers=["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
         days=200,
         seed=42,
@@ -351,7 +383,7 @@ class TestFullPipelineRoundTrip:
     def test_full_round_trip(self) -> None:
         """One test that exercises every pipeline stage end-to-end."""
         # 1. Generate data
-        prices = generate_us_equity_data(tickers=["AAPL", "MSFT", "GOOGL"], days=150, seed=99)
+        prices = _make_test_prices(tickers=["AAPL", "MSFT", "GOOGL"], days=150, seed=99)
         tickers = ["AAPL", "MSFT", "GOOGL"]
 
         # 2. Run momentum pipeline

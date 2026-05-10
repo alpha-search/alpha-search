@@ -88,9 +88,17 @@ class TestProviderRegistry:
 class TestYFinanceProvider:
     """Tests for the Yahoo Finance data provider using mocked yfinance."""
 
+    @patch("alpha_search.data.yfinance_provider._load_from_disk_cache")
+    @patch("alpha_search.data.yfinance_provider._save_to_disk_cache")
     @patch("yfinance.Ticker")
-    def test_yfinance_provider_mock(self, mock_ticker_cls: MagicMock) -> None:
+    def test_yfinance_provider_mock(
+        self,
+        mock_ticker_cls: MagicMock,
+        mock_save_disk: MagicMock,
+        mock_load_disk: MagicMock,
+    ) -> None:
         """Mock yfinance.Ticker and assert get_prices returns a DataFrame."""
+        mock_load_disk.return_value = None  # Force yfinance download
         fixture = _make_ohlcv("2023-01-01", 30)
         ticker_instance = MagicMock()
         ticker_instance.history.return_value = fixture
@@ -113,9 +121,17 @@ class TestYFinanceProvider:
             except FileNotFoundError:
                 pass
 
+    @patch("alpha_search.data.yfinance_provider._load_from_disk_cache")
+    @patch("alpha_search.data.yfinance_provider._save_to_disk_cache")
     @patch("yfinance.Ticker")
-    def test_yfinance_provider_uses_cache(self, mock_ticker_cls: MagicMock) -> None:
-        """Second call with same params should hit cache."""
+    def test_yfinance_provider_uses_cache(
+        self,
+        mock_ticker_cls: MagicMock,
+        mock_save_disk: MagicMock,
+        mock_load_disk: MagicMock,
+    ) -> None:
+        """Second call with same params should hit in-memory cache."""
+        mock_load_disk.return_value = None  # Force yfinance download on first call
         fixture = _make_ohlcv("2023-01-01", 30)
         ticker_instance = MagicMock()
         ticker_instance.history.return_value = fixture
@@ -130,7 +146,7 @@ class TestYFinanceProvider:
             assert len(result1) == 30
             assert mock_ticker_cls.call_count == 1
 
-            # Second fetch — should hit cache, not call yfinance again
+            # Second fetch — should hit in-memory cache, not call yfinance again
             result2 = provider.get_prices("AAPL", start="2023-01-01", end="2023-01-31")
             assert len(result2) == 30
             # yfinance.Ticker should NOT have been called a second time
