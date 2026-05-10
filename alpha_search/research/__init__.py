@@ -47,17 +47,29 @@ from alpha_search.research.strategy_report import (
     generate_csv_summary,
     generate_docx_report,
 )
-from alpha_search.research.indian_etf_intraday import (
-    INDIAN_ETFS,
-    LOOKBACK_WINDOWS,
-    PORTFOLIO_METHODS,
-    fetch_indian_etf_data,
-    generate_report,
-    run_full_pipeline as run_indian_etf_pipeline,
-    run_noise_breakout_backtest,
-    run_portfolio_backtest,
-    store_results_to_memory,
-)
+# Lazy import — avoids pulling in optional plotting deps on module load
+try:
+    from alpha_search.research.indian_etf_intraday import (
+        INDIAN_ETFS,
+        LOOKBACK_WINDOWS,
+        PORTFOLIO_METHODS,
+        fetch_indian_etf_data,
+        generate_report,
+        run_full_pipeline as run_indian_etf_pipeline,
+        run_noise_breakout_backtest,
+        run_portfolio_backtest,
+        store_results_to_memory,
+    )
+except ImportError:  # pragma: no cover
+    INDIAN_ETFS = []
+    LOOKBACK_WINDOWS = []
+    PORTFOLIO_METHODS = []
+    fetch_indian_etf_data = None  # type: ignore[assignment]
+    generate_report = None  # type: ignore[assignment]
+    run_indian_etf_pipeline = None  # type: ignore[assignment]
+    run_noise_breakout_backtest = None  # type: ignore[assignment]
+    run_portfolio_backtest = None  # type: ignore[assignment]
+    store_results_to_memory = None  # type: ignore[assignment]
 from alpha_search.research.swarm_pipeline import (
     create_agent_swarm,
     print_combined_summary,

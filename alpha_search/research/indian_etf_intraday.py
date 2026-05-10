@@ -33,8 +33,6 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -51,7 +49,14 @@ from alpha_search.signals.noise_breakout import (
     volatility_targeted_position,
 )
 
-matplotlib.use("Agg")
+# Lazy import — plotting is optional and not available in CI
+try:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ImportError:  # pragma: no cover
+    plt = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
