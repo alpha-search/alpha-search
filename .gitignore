@@ -118,3 +118,4 @@ desktop.ini
 *.safetensors
 models/
 checkpoints/
+reports/demo/*.sqlite*
