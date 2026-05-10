@@ -105,18 +105,20 @@ def _make_test_prices(
 
     tickers = tickers or ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
     rng = np.random.default_rng(seed)
-    dates = pd.date_range(end=pd.Timestamp.now(), periods=days, freq="B")
+    # Use Calendar day frequency (not Business day) to guarantee exact length
+    dates = pd.date_range(end=pd.Timestamp.now().normalize(), periods=days, freq="D")
     data: dict[tuple[str, str], pd.Series] = {}
+    n = len(dates)  # use actual length, not requested days
     for t in tickers:
-        returns = rng.normal(0.0003, 0.015, days)
+        returns = rng.normal(0.0003, 0.015, n)
         close = 100.0 * np.cumprod(1 + returns)
-        noise = rng.uniform(0.005, 0.02, days)
+        noise = rng.uniform(0.005, 0.02, n)
         data[(t, "Close")] = pd.Series(close, index=dates)
         data[(t, "High")] = pd.Series(close * (1 + noise), index=dates)
         data[(t, "Low")] = pd.Series(close * (1 - noise), index=dates)
-        data[(t, "Open")] = pd.Series(close + rng.normal(0, 0.5, days), index=dates)
+        data[(t, "Open")] = pd.Series(close + rng.normal(0, 0.5, n), index=dates)
         data[(t, "Volume")] = pd.Series(
-            rng.integers(1_000_000, 10_000_000, days), index=dates
+            rng.integers(1_000_000, 10_000_000, n), index=dates
         )
     df = pd.DataFrame(data)
     df.columns.names = ["ticker", "field"]
