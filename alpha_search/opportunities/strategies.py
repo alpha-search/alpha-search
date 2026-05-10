@@ -440,34 +440,58 @@ def _hedge_ratio(
     stock_a: pd.Series,
     stock_b: pd.Series,
     estimation_window: int = 252,
+    rolling_window: Optional[int] = None,
 ) -> Tuple[float, pd.Series]:
-    """Estimate hedge ratio via OLS on a training window.
+    """Estimate hedge ratio via OLS.
 
-    Beta is estimated on the *first* ``estimation_window`` observations
-    only, preventing look-ahead bias.  The residuals are computed on the
-    full aligned series using the out-of-sample beta.
+    Two modes are available:
+
+    **Fixed window** (default, ``rolling_window=None``):
+        Beta is estimated once on the *first* ``estimation_window``
+        observations only, preventing look-ahead bias. Residuals are then
+        computed on the full aligned series using that out-of-sample beta.
+
+    **Rolling window** (``rolling_window=N``):
+        Beta is re-estimated at every date using the preceding *N*
+        observations, producing a time-varying hedge ratio. The residual
+        at each date uses the beta estimated *before* that bar (no
+        look-ahead). The returned scalar beta is the most-recent estimate.
 
     Parameters
     ----------
     stock_a, stock_b :
         Aligned price series (same index).
     estimation_window :
-        Number of initial observations for beta estimation
-        (default 252 ≈ 1 year).
+        Number of initial observations for fixed-window beta estimation
+        (default 252 ≈ 1 year). Ignored when *rolling_window* is set.
+    rolling_window :
+        If provided, use a rolling OLS window of this many observations
+        for time-varying hedge-ratio estimation (e.g. 63 = one quarter).
 
     Returns
     -------
     float, pd.Series
-        Hedge ratio (beta) and spread residuals (a - beta * b).
+        Latest hedge ratio (beta) and spread residuals ``a - beta * b``.
     """
     aligned = pd.concat([stock_a, stock_b], axis=1).dropna()
     if aligned.shape[0] < 20:
         return 1.0, pd.Series(dtype=float)
 
-    # Training window: first N observations for beta estimation
+    full_a: pd.Series = aligned.iloc[:, 0]
+    full_b: pd.Series = aligned.iloc[:, 1]
+
+    if rolling_window is not None:
+        # Rolling OLS: re-estimate beta each day from the preceding N bars
+        roll_cov = full_a.rolling(rolling_window).cov(full_b)
+        roll_var = full_b.rolling(rolling_window).var()
+        roll_beta = (roll_cov / roll_var.replace(0, np.nan)).ffill().bfill().fillna(1.0)
+        residuals = full_a - roll_beta * full_b
+        return float(roll_beta.iloc[-1]), residuals
+
+    # Fixed-window OLS: estimate beta on first N observations only
     n_train = min(estimation_window, aligned.shape[0])
-    train_a = aligned.iloc[:n_train, 0].values
-    train_b = aligned.iloc[:n_train, 1].values
+    train_a = full_a.iloc[:n_train].values
+    train_b = full_b.iloc[:n_train].values
 
     # OLS: beta = Cov(a, b) / Var(b)
     b_var = np.var(train_b, ddof=1)
@@ -477,11 +501,9 @@ def _hedge_ratio(
     covariance = np.cov(train_a, train_b, ddof=1)[0, 1]
     beta = covariance / b_var
 
-    # Residuals on FULL series (out-of-sample for points > n_train)
-    full_a = aligned.iloc[:, 0].values
-    full_b = aligned.iloc[:, 1].values
+    # Residuals on FULL series (out-of-sample for points beyond n_train)
     residuals = full_a - beta * full_b
-    return float(beta), pd.Series(residuals, index=aligned.index)
+    return float(beta), residuals
 
 
 def arbitrage_scan(

@@ -8,9 +8,27 @@
 
 **The Agent-Powered Quantitative Research Framework**
 
-> **Version 0.2.1** — Data Platform with 37 sources, Agent Swarm collaboration, and Persistent Memory
+> **Version 0.2.2** — Data Platform with 37 sources, Agent Swarm collaboration, and Persistent Memory
 >
 > Previously developed internally as Quant.OS. Rebranded to Alpha Search before public launch.
+
+---
+
+## What's New in v0.2.2
+
+**13 correctness and security fixes** from a comprehensive code review — full details in [`CHANGES_v0.2.2.md`](CHANGES_v0.2.2.md).
+
+| Area | Change |
+|------|--------|
+| **Agent Swarm** | `QuantEngineerAgent` now runs real `BacktestEngine` backtests (was random simulation). Sign-offs are conditional on critique severity. Word-boundary ticker matching fixes MET/META collision. |
+| **Risk / Drawdown** | Unified negative drawdown convention (`-0.25` = 25% DD) throughout. `RiskManagerAgent` alerts now fire correctly. |
+| **Backtest** | Position signals clipped to `[-1, 1]` (prevents >100% leverage). Transaction costs use portfolio notional value (was per-share, underestimating costs ~1000×). |
+| **Signals** | RSI uses Wilder's EMA (matches literature). RSI divide-by-zero guard added. |
+| **Pairs Trading** | `_hedge_ratio()` gains a `rolling_window` parameter for time-varying hedge-ratio estimation. Log(0) tickers explicitly excluded with a warning before `np.log()`. |
+| **Security** | `CacheManager` enforces parquet-only deserialization — `pickle.loads()` removed. |
+| **Memory** | `get_unresolved_blockers()` now filters `status="active"` correctly. Schema init failures logged and re-raised when >50% fail. |
+| **Architecture** | `CritiqueGenerator` and `ConsensusBuilder` extracted from the `AgentSwarm` god class. `DataEngineerAgent` validation vectorized. |
+| **Tests** | 52 new tests: `QuantEngineerAgent` signal construction, rolling hedge ratio, and a full end-to-end data → signals → backtest → agents → memory integration test. Total: **174 tests**. |
 
 ---
 

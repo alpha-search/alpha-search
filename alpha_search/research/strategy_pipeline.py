@@ -23,6 +23,17 @@ Example::
     pipeline = MomentumPipeline(prices, tickers=["AAPL", "MSFT", "GOOGL"])
     result = pipeline.run()
     print(result["metrics"])
+
+For the :class:`ArbitragePipeline`, :meth:`~ArbitragePipeline.generate_signals`
+and :meth:`~ArbitragePipeline.backtest` both accept an optional *pairs_df*
+argument. Pass the result of :meth:`~ArbitragePipeline.discover_opportunities`
+to avoid redundant O(n²) pair scanning::
+
+    arb = ArbitragePipeline(prices, tickers=["AAPL", "MSFT", "GOOGL", "AMZN"])
+    pairs = arb.discover_opportunities()          # O(n²) scan — run once
+    signals = arb.generate_signals(pairs)         # reuses pairs_df
+    backtests = arb.backtest(signals, pairs)      # reuses pairs_df again
+    metrics = arb.compute_metrics(backtests)
 """
 
 from __future__ import annotations
