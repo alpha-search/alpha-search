@@ -751,7 +751,10 @@ class ArbitragePipeline:
     # Step 2: Spread & signal generation                                 #
     # ------------------------------------------------------------------ #
 
-    def generate_signals(self) -> Dict[str, pd.Series]:
+    def generate_signals(
+        self,
+        pairs_df: Optional[pd.DataFrame] = None,
+    ) -> Dict[str, pd.Series]:
         """Generate z-score spread signals for each pair.
 
         The spread is defined as::
@@ -762,13 +765,22 @@ class ArbitragePipeline:
         is ``-z_score / 2`` (clipped to ``[-1, 1]``), i.e. go long the
         spread when it is depressed and short when elevated.
 
+        Parameters
+        ----------
+        pairs_df :
+            Pre-computed pair DataFrame (from :meth:`discover_opportunities`).
+            If ``None``, the method calls ``discover_opportunities()``
+            internally — callers should pass the result to avoid
+            redundant computation.
+
         Returns
         -------
         dict[str, pd.Series]
             Mapping ``"A_B"`` -> spread signal series.
         """
+        if pairs_df is None:
+            pairs_df = self.discover_opportunities()
         signals: Dict[str, pd.Series] = {}
-        pairs_df = self.discover_opportunities()
 
         for _, row in pairs_df.iterrows():
             t_a, t_b = row["ticker_a"], row["ticker_b"]
@@ -808,7 +820,11 @@ class ArbitragePipeline:
     # Step 3: Backtest                                                   #
     # ------------------------------------------------------------------ #
 
-    def backtest(self, signals: Dict[str, pd.Series]) -> Dict[str, Any]:
+    def backtest(
+        self,
+        signals: Dict[str, pd.Series],
+        pairs_df: Optional[pd.DataFrame] = None,
+    ) -> Dict[str, Any]:
         """Run backtests on each pair's spread signal.
 
         The backtest uses a *synthetic spread price* built from the
@@ -820,17 +836,20 @@ class ArbitragePipeline:
         ----------
         signals:
             Output from :meth:`generate_signals`.
+        pairs_df :
+            Pre-computed pair DataFrame.  If ``None``,
+            ``discover_opportunities()`` is called internally.
 
         Returns
         -------
         dict[str, BacktestResult]
             Mapping pair key -> backtest result.
         """
+        if pairs_df is None:
+            pairs_df = self.discover_opportunities()
         engine = BacktestEngine()
         cost_model = _DEFAULT_COST_MODEL
         backtests: Dict[str, Any] = {}
-
-        pairs_df = self.discover_opportunities()
         pair_info = {
             f"{r['ticker_a']}_{r['ticker_b']}": (r["ticker_a"], r["ticker_b"], r["hedge_ratio"])
             for _, r in pairs_df.iterrows()
@@ -923,8 +942,8 @@ class ArbitragePipeline:
             self.max_pairs,
         )
         opportunities = self.discover_opportunities()
-        signals = self.generate_signals()
-        backtests = self.backtest(signals)
+        signals = self.generate_signals(opportunities)
+        backtests = self.backtest(signals, opportunities)
         metrics = self.compute_metrics(backtests)
 
         self.results = {

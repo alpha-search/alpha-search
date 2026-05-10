@@ -61,11 +61,16 @@ class Metrics:
         returns: pd.Series,
         risk_free: float = 0.02,
     ) -> float:
-        """Sortino ratio using downside deviation only."""
+        """Sortino ratio using downside deviation only.
+
+        Downside deviation is computed from *excess* returns below the
+        target (MAR = risk-free rate), not from raw returns below zero.
+        """
         if returns.empty:
             return 0.0
         excess = returns - risk_free / _TRADING_DAYS_PER_YEAR
-        downside = returns[returns < 0].std()
+        # Downside deviation: std of negative *excess* returns only
+        downside = excess[excess < 0].std()
         if downside == 0 or np.isnan(downside):
             return 0.0
         return float(excess.mean() / downside * np.sqrt(_TRADING_DAYS_PER_YEAR))
@@ -85,22 +90,28 @@ class Metrics:
 
     @staticmethod
     def max_drawdown_duration(equity: pd.Series) -> int:
-        """Longest duration (in trading days) that equity stays below a previous peak."""
+        """Longest duration (in trading days) that equity stays below a previous peak.
+
+        Uses a vectorised cumsum over drawdown-group runs — O(n) in pandas
+        instead of a Python loop.
+        """
         if equity.empty or len(equity) < 2:
             return 0
         cummax = equity.cummax()
         is_drawdown = equity < cummax
 
-        # Find longest consecutive True run
-        max_dur = 0
-        cur_dur = 0
-        for val in is_drawdown:
-            if val:
-                cur_dur += 1
-                max_dur = max(max_dur, cur_dur)
-            else:
-                cur_dur = 0
-        return max_dur
+        if not is_drawdown.any():
+            return 0
+
+        # Group consecutive drawdown days and count each group's length
+        # (~is_drawdown).cumsum() increments at every new peak → creates
+        # a unique group id for each drawdown period.
+        groups = (~is_drawdown).cumsum()
+        # Count days per group, return the max (subtracting non-drawdown group 0)
+        durations = is_drawdown.groupby(groups).sum()
+        if 0 in durations.index:
+            durations = durations.drop(0)
+        return int(durations.max()) if len(durations) > 0 else 0
 
     @staticmethod
     def win_rate(returns: pd.Series) -> float:

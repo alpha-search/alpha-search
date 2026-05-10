@@ -178,13 +178,16 @@ class AgentJournal:
         )
 
         # --- Structured DB write ---
+        # Store severity as a tag for queryability (search_by_tags)
+        severity_tag = f"severity:{severity}"
+        all_tags = list(tags) + [severity_tag]
         record = MemoryRecord(
             agent_name=agent_name,
             memory_type="blocker",
             title=blocker,
             content=f"Severity: {severity}",
             status="active",
-            tags=tags,
+            tags=all_tags,
         )
         self.store.add_memory(record)
 

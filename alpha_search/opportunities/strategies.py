@@ -436,27 +436,51 @@ def _adf_pvalue(spread: pd.Series) -> float:
         return 1.0
 
 
-def _hedge_ratio(stock_a: pd.Series, stock_b: pd.Series) -> Tuple[float, pd.Series]:
-    """Estimate hedge ratio via OLS: ``a = beta * b + residual``.
+def _hedge_ratio(
+    stock_a: pd.Series,
+    stock_b: pd.Series,
+    estimation_window: int = 252,
+) -> Tuple[float, pd.Series]:
+    """Estimate hedge ratio via OLS on a training window.
 
-    Returns (beta, residuals).
+    Beta is estimated on the *first* ``estimation_window`` observations
+    only, preventing look-ahead bias.  The residuals are computed on the
+    full aligned series using the out-of-sample beta.
+
+    Parameters
+    ----------
+    stock_a, stock_b :
+        Aligned price series (same index).
+    estimation_window :
+        Number of initial observations for beta estimation
+        (default 252 ≈ 1 year).
+
+    Returns
+    -------
+    float, pd.Series
+        Hedge ratio (beta) and spread residuals (a - beta * b).
     """
     aligned = pd.concat([stock_a, stock_b], axis=1).dropna()
     if aligned.shape[0] < 20:
         return 1.0, pd.Series(dtype=float)
 
-    a = aligned.iloc[:, 0].values
-    b = aligned.iloc[:, 1].values
+    # Training window: first N observations for beta estimation
+    n_train = min(estimation_window, aligned.shape[0])
+    train_a = aligned.iloc[:n_train, 0].values
+    train_b = aligned.iloc[:n_train, 1].values
 
     # OLS: beta = Cov(a, b) / Var(b)
-    b_var = np.var(b, ddof=1)
+    b_var = np.var(train_b, ddof=1)
     if b_var == 0 or not np.isfinite(b_var):
         return 1.0, pd.Series(dtype=float)
 
-    covariance = np.cov(a, b, ddof=1)[0, 1]
+    covariance = np.cov(train_a, train_b, ddof=1)[0, 1]
     beta = covariance / b_var
 
-    residuals = a - beta * b
+    # Residuals on FULL series (out-of-sample for points > n_train)
+    full_a = aligned.iloc[:, 0].values
+    full_b = aligned.iloc[:, 1].values
+    residuals = full_a - beta * full_b
     return float(beta), pd.Series(residuals, index=aligned.index)
 
 
