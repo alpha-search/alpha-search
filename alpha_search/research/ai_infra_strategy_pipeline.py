@@ -1073,14 +1073,15 @@ def _run_agent_review(
         wide_prices = pd.concat([close, volume], axis=1)
         wide_prices.columns = mc
 
-        de_critiques = de.validate_data(wide_prices, tickers)
+        de_critiques = de.validate_data(wide_prices)
         lines.append("## DataEngineerAgent\n")
         for c in de_critiques:
             d = c if isinstance(c, dict) else c.to_dict()
             lines.append(f"- **[{d.get('severity','info').upper()}]** {d.get('message','')}")
         lines.append("")
 
-        oa_critiques = oa.rank_opportunities(wide_prices, tickers)
+        rankings = oa.rank_momentum(wide_prices)
+        oa_critiques = oa.critique_rankings(rankings)
         lines.append("## OpportunityAgent\n")
         for c in oa_critiques:
             d = c if isinstance(c, dict) else c.to_dict()
