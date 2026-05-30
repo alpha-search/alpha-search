@@ -37,7 +37,7 @@ def generate_gemini_report(prompt: str) -> str:
             "- Strategy recommendation: Allocate MVO weights with a 35% single-stock concentration cap."
         )
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     payload = {
         "contents": [{
