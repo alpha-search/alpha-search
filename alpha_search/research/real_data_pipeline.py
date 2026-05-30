@@ -1305,6 +1305,1198 @@ def _write_markdown_report(
 # CLI Entry Point
 # ===========================================================================
 
+# ===========================================================================
+# Extended Real-Data Backtesting API
+# Colab / script-friendly standalone functions.
+# All functions use real OHLCV data only — no simulation, no random returns.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Universe definitions
+# ---------------------------------------------------------------------------
+
+UNIVERSE_US_LARGE_CAP: List[str] = [
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN",
+    "META", "JPM", "XOM", "UNH", "SPY", "QQQ",
+]
+UNIVERSE_INDIA_EQUITY: List[str] = [
+    "NIFTYBEES.NS", "BANKBEES.NS", "HDFCBANK.NS", "ICICIBANK.NS",
+    "SBIN.NS", "RELIANCE.NS", "INFY.NS", "TATASTEEL.NS", "LT.NS",
+]
+UNIVERSE_CRYPTO: List[str] = ["BTC-USD", "ETH-USD", "SOL-USD"]
+
+UNIVERSES: Dict[str, List[str]] = {
+    "us_large_cap": UNIVERSE_US_LARGE_CAP,
+    "india_equity": UNIVERSE_INDIA_EQUITY,
+    "crypto": UNIVERSE_CRYPTO,
+    "all": UNIVERSE_US_LARGE_CAP + UNIVERSE_INDIA_EQUITY + UNIVERSE_CRYPTO,
+}
+
+# ---------------------------------------------------------------------------
+# 1. fetch_yfinance_ohlcv
+# ---------------------------------------------------------------------------
+
+def fetch_yfinance_ohlcv(
+    symbols: List[str],
+    period: str = "2y",
+    interval: str = "1d",
+) -> tuple:
+    """Fetch real OHLCV from yfinance using period/interval API.
+
+    Each symbol is fetched independently so a single failure does not
+    prevent others from succeeding.  Failed symbols are logged and
+    returned in the ``failed`` list — no data is fabricated.
+
+    Parameters
+    ----------
+    symbols:
+        Yahoo-Finance ticker symbols.
+    period:
+        History period accepted by yfinance, e.g. ``"1y"``, ``"2y"``.
+    interval:
+        Bar interval, e.g. ``"1d"``, ``"1h"``.
+
+    Returns
+    -------
+    tuple[dict[str, pd.DataFrame], list[str], list[str]]
+        ``(frames, succeeded, failed)`` where *frames* maps ticker →
+        single-ticker OHLCV DataFrame with columns
+        ``Open, High, Low, Close, Volume``.
+    """
+    try:
+        import yfinance as yf
+    except ImportError as exc:  # pragma: no cover
+        logger.error("yfinance not installed: %s", exc)
+        return {}, [], list(symbols)
+
+    frames: Dict[str, pd.DataFrame] = {}
+    succeeded: List[str] = []
+    failed: List[str] = []
+
+    for sym in symbols:
+        try:
+            raw = yf.download(
+                sym,
+                period=period,
+                interval=interval,
+                progress=False,
+                auto_adjust=True,
+            )
+            if raw is None or raw.empty:
+                logger.warning("fetch_yfinance_ohlcv: %s returned empty data — skipping", sym)
+                failed.append(sym)
+                continue
+
+            # Flatten MultiIndex columns produced by recent yfinance versions
+            if isinstance(raw.columns, pd.MultiIndex):
+                raw.columns = raw.columns.get_level_values(0)
+
+            # Normalise to title-case column names
+            raw.columns = [str(c).title() for c in raw.columns]
+
+            std = ["Open", "High", "Low", "Close", "Volume"]
+            available = [c for c in std if c in raw.columns]
+            if "Close" not in available:
+                logger.warning("fetch_yfinance_ohlcv: %s has no Close column — skipping", sym)
+                failed.append(sym)
+                continue
+
+            df = raw[available].copy()
+            df = df[df["Close"] > 0].dropna(subset=["Close"])
+
+            if len(df) < 20:
+                logger.warning(
+                    "fetch_yfinance_ohlcv: %s has only %d valid rows — skipping",
+                    sym, len(df),
+                )
+                failed.append(sym)
+                continue
+
+            frames[sym] = df
+            succeeded.append(sym)
+            logger.info("fetch_yfinance_ohlcv: %s — %d bars (%s interval)", sym, len(df), interval)
+
+        except Exception as exc:
+            logger.warning("fetch_yfinance_ohlcv: %s failed — %s", sym, exc)
+            failed.append(sym)
+
+    if failed:
+        logger.warning(
+            "fetch_yfinance_ohlcv: %d symbol(s) skipped: %s",
+            len(failed), failed,
+        )
+
+    return frames, succeeded, failed
+
+
+# ---------------------------------------------------------------------------
+# 2. load_csv_ohlcv
+# ---------------------------------------------------------------------------
+
+def load_csv_ohlcv(filepath: str) -> Dict[str, pd.DataFrame]:
+    """Load real OHLCV data from a CSV file.
+
+    Expected CSV schema::
+
+        timestamp,symbol,open,high,low,close,volume
+
+    Columns are case-insensitive.  Returns a dict mapping each symbol
+    to its OHLCV DataFrame (index = datetime, columns title-cased).
+
+    Parameters
+    ----------
+    filepath:
+        Path to the CSV file.
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Mapping symbol → single-ticker OHLCV DataFrame.
+        Empty dict if the file cannot be parsed.
+    """
+    try:
+        df = pd.read_csv(filepath)
+    except Exception as exc:
+        logger.error("load_csv_ohlcv: cannot read %s — %s", filepath, exc)
+        return {}
+
+    # Normalise column names to lowercase
+    df.columns = [c.strip().lower() for c in df.columns]
+
+    required = {"timestamp", "symbol", "open", "high", "low", "close", "volume"}
+    missing = required - set(df.columns)
+    if missing:
+        logger.error(
+            "load_csv_ohlcv: missing required columns %s in %s", missing, filepath
+        )
+        return {}
+
+    # Parse timestamp
+    try:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+    except Exception as exc:
+        logger.error("load_csv_ohlcv: cannot parse timestamp column — %s", exc)
+        return {}
+
+    frames: Dict[str, pd.DataFrame] = {}
+    for sym, group in df.groupby("symbol"):
+        ticker_df = group.set_index("timestamp").sort_index()
+        ticker_df = ticker_df[["open", "high", "low", "close", "volume"]].copy()
+        ticker_df.columns = ["Open", "High", "Low", "Close", "Volume"]
+        # Remove rows with non-positive close
+        ticker_df = ticker_df[ticker_df["Close"] > 0].dropna(subset=["Close"])
+        if len(ticker_df) < 20:
+            logger.warning("load_csv_ohlcv: %s has only %d valid rows — skipping", sym, len(ticker_df))
+            continue
+        frames[str(sym)] = ticker_df
+        logger.info("load_csv_ohlcv: %s — %d rows loaded from CSV", sym, len(ticker_df))
+
+    return frames
+
+
+# ---------------------------------------------------------------------------
+# 3. validate_ohlcv
+# ---------------------------------------------------------------------------
+
+def validate_ohlcv(
+    df: pd.DataFrame,
+    ticker: str = "",
+) -> tuple:
+    """Validate a single-ticker OHLCV DataFrame.
+
+    Parameters
+    ----------
+    df:
+        DataFrame with columns ``Open, High, Low, Close, Volume``.
+    ticker:
+        Ticker symbol for logging context.
+
+    Returns
+    -------
+    tuple[bool, list[str]]
+        ``(is_valid, warnings)`` where *is_valid* is ``True`` when the
+        data passes the minimum quality bar.  *warnings* is a list of
+        human-readable issue descriptions (may be non-empty even when
+        ``is_valid`` is ``True``).
+    """
+    warnings_list: List[str] = []
+    prefix = f"{ticker}: " if ticker else ""
+
+    # Required columns
+    required = ["Open", "High", "Low", "Close", "Volume"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        warnings_list.append(f"{prefix}Missing columns: {missing}")
+        return False, warnings_list
+
+    if df.empty:
+        warnings_list.append(f"{prefix}DataFrame is empty")
+        return False, warnings_list
+
+    if len(df) < 20:
+        warnings_list.append(
+            f"{prefix}Only {len(df)} rows — minimum 20 required for signals"
+        )
+        return False, warnings_list
+
+    # Non-positive prices — Close must be > 0 for all rows; other OHLC columns
+    # may have occasional zeros (e.g. missing Volume) so only Close is fatal.
+    n_bad_close = (df["Close"] <= 0).sum()
+    if n_bad_close > 0:
+        warnings_list.append(f"{prefix}Close: {n_bad_close} non-positive value(s)")
+        return False, warnings_list
+
+    for col in ["Open", "High", "Low"]:
+        n_bad = (df[col] <= 0).sum()
+        if n_bad > 0:
+            warnings_list.append(f"{prefix}{col}: {n_bad} non-positive value(s)")
+
+    # NaN rate
+    close_nan_pct = df["Close"].isna().mean()
+    if close_nan_pct > 0.1:
+        warnings_list.append(
+            f"{prefix}Close: {close_nan_pct:.1%} NaN (threshold 10%)"
+        )
+
+    # OHLCV integrity: High >= max(Open, Close), Low <= min(Open, Close)
+    clean = df[["Open", "High", "Low", "Close"]].dropna()
+    if not clean.empty:
+        n_high_violation = ((clean["High"] < clean[["Open", "Close"]].max(axis=1))).sum()
+        n_low_violation = ((clean["Low"] > clean[["Open", "Close"]].min(axis=1))).sum()
+        if n_high_violation > 0:
+            warnings_list.append(f"{prefix}High < max(Open,Close) on {n_high_violation} bar(s)")
+            return False, warnings_list
+        if n_low_violation > 0:
+            warnings_list.append(f"{prefix}Low > min(Open,Close) on {n_low_violation} bar(s)")
+
+    # Large single-day gap (> 50%) — likely split or data error
+    returns = df["Close"].pct_change().dropna()
+    if not returns.empty:
+        max_gap = returns.abs().max()
+        if max_gap > 0.5:
+            gap_date = returns.abs().idxmax()
+            warnings_list.append(
+                f"{prefix}Large price gap: {max_gap:.1%} on {gap_date} "
+                "(possible split/dividend — verify)"
+            )
+
+    is_valid = (
+        close_nan_pct <= 0.5
+        and len(df) >= 20
+        and not missing
+    )
+    return is_valid, warnings_list
+
+
+# ---------------------------------------------------------------------------
+# 4. Signal generators
+# ---------------------------------------------------------------------------
+
+def generate_momentum_signal(
+    close: pd.Series,
+    lookback: int = 20,
+    threshold: float = 0.0,
+    ma_confirm: bool = True,
+    ma_short: int = 20,
+    ma_long: int = 50,
+) -> pd.Series:
+    """Generate a momentum signal from real price data.
+
+    Signal logic:
+
+    1. Compute *lookback*-day rolling return (``close / close.shift(lookback) - 1``).
+    2. Go long (1.0) when return > *threshold*; flat (0.0) otherwise.
+    3. Optionally confirm with MA crossover (short MA > long MA).
+
+    No future data is used: all rolling calculations reference only past bars.
+    Position is applied on the *following* bar by the BacktestEngine.
+
+    Parameters
+    ----------
+    close:
+        Real closing-price series.
+    lookback:
+        Return look-back window in bars.
+    threshold:
+        Minimum return for a long signal (0.0 = any positive return).
+    ma_confirm:
+        When ``True``, require MA crossover confirmation.
+    ma_short, ma_long:
+        Short / long MA periods for crossover confirmation.
+
+    Returns
+    -------
+    pd.Series
+        Binary signal in {0.0, 1.0}.
+    """
+    if len(close) < max(lookback, ma_long) + 5:
+        return pd.Series(0.0, index=close.index, name=close.name)
+
+    rolling_ret = close / close.shift(lookback) - 1.0
+    signal = (rolling_ret > threshold).astype(float)
+
+    if ma_confirm and ma_long > ma_short:
+        sma_s = close.rolling(ma_short).mean()
+        sma_l = close.rolling(ma_long).mean()
+        ma_flag = (sma_s > sma_l).astype(float)
+        signal = signal * ma_flag
+
+    signal = signal.fillna(0.0)
+    signal.name = close.name
+    return signal
+
+
+def generate_mean_reversion_signal(
+    close: pd.Series,
+    window: int = 20,
+    z_threshold: float = 2.0,
+    allow_short: bool = False,
+) -> pd.Series:
+    """Generate a mean-reversion signal from real price data.
+
+    Signal logic:
+
+    * Long (+1.0) when z-score < −*z_threshold* (oversold).
+    * Short (−1.0) — only when ``allow_short=True`` — when z-score > +*z_threshold*.
+    * Flat (0.0) otherwise.
+
+    Z-score is computed on the price level (not returns) over a rolling
+    *window* to detect deviation from the rolling mean.
+
+    Parameters
+    ----------
+    close:
+        Real closing-price series.
+    window:
+        Rolling window for mean and std.
+    z_threshold:
+        Absolute z-score threshold to trigger entry.
+    allow_short:
+        When ``True``, generate short signals above the upper threshold.
+
+    Returns
+    -------
+    pd.Series
+        Signal values in {−1.0, 0.0, +1.0}.
+    """
+    if len(close) < window + 5:
+        return pd.Series(0.0, index=close.index, name=close.name)
+
+    roll_mean = close.rolling(window).mean()
+    roll_std = close.rolling(window).std().replace(0, np.nan)
+    z = (close - roll_mean) / roll_std
+
+    signal = pd.Series(0.0, index=close.index, name=close.name)
+    signal[z < -z_threshold] = 1.0   # oversold → long
+    if allow_short:
+        signal[z > z_threshold] = -1.0  # overbought → short
+
+    return signal.fillna(0.0)
+
+
+def generate_breakout_signal(
+    close: pd.Series,
+    high: Optional[pd.Series] = None,
+    low: Optional[pd.Series] = None,
+    window: int = 20,
+    allow_short: bool = False,
+) -> pd.Series:
+    """Generate a Donchian-channel breakout signal from real price data.
+
+    Uses the *N*-bar rolling high/low channel.  The channel is computed
+    on past bars only (``shift(1)`` before ``rolling()``) so there is no
+    look-ahead bias.  Position sizing is applied on the following bar by
+    the BacktestEngine.
+
+    For **true intraday opening-range breakout** you need intraday data
+    (e.g. ``interval="15m"`` or ``"1h"``).  With daily data (``interval="1d"``)
+    this function implements the classic Donchian channel system:
+
+    * Long (1.0) when close breaks above the *N*-day rolling high.
+    * Short (−1.0) — only when ``allow_short=True`` — when close breaks
+      below the *N*-day rolling low.
+    * Flat (0.0) when inside the channel.
+
+    Parameters
+    ----------
+    close:
+        Real closing-price series.
+    high, low:
+        Optional high / low series for more accurate channel edges.
+        Falls back to close-based channel when not provided.
+    window:
+        Channel look-back period in bars.
+    allow_short:
+        When ``True``, go short below the lower channel.
+
+    Returns
+    -------
+    pd.Series
+        Signal values in {−1.0, 0.0, +1.0}.
+    """
+    if len(close) < window + 5:
+        return pd.Series(0.0, index=close.index, name=close.name)
+
+    # Use separate high/low if available; otherwise use close-based channel
+    upper_src = high if high is not None else close
+    lower_src = low if low is not None else close
+
+    # Shift by 1 before rolling to exclude the current bar (no lookahead)
+    roll_high = upper_src.shift(1).rolling(window).max()
+    roll_low = lower_src.shift(1).rolling(window).min()
+
+    signal = pd.Series(0.0, index=close.index, name=close.name)
+    signal[close > roll_high] = 1.0
+    if allow_short:
+        signal[close < roll_low] = -1.0
+
+    return signal.fillna(0.0)
+
+
+# ---------------------------------------------------------------------------
+# 5. Vectorized backtest wrapper
+# ---------------------------------------------------------------------------
+
+def run_vectorized_backtest(
+    close: pd.Series,
+    signal: pd.Series,
+    high: Optional[pd.Series] = None,
+    low: Optional[pd.Series] = None,
+    initial_capital: float = 100_000.0,
+    transaction_cost_bps: float = 10.0,
+    slippage_bps: float = 10.0,
+) -> Any:
+    """Run a vectorized backtest on a single-ticker price series.
+
+    Wraps :class:`BacktestEngine` with explicit cost parameters.
+    The engine applies a one-bar lag to the signal before computing
+    strategy returns (no lookahead).
+
+    Parameters
+    ----------
+    close:
+        Real closing-price series (index = datetime).
+    signal:
+        Signal series aligned to *close*.  Values in [−1, 1].
+    high, low:
+        Optional high / low series (not currently used by the engine
+        but accepted for API consistency with signal generators).
+    initial_capital:
+        Starting portfolio value.
+    transaction_cost_bps:
+        One-way commission in basis points (10 bps = 0.10%).
+    slippage_bps:
+        One-way slippage estimate in basis points.
+
+    Returns
+    -------
+    BacktestResult
+        Full result including equity curve, returns, trades, metrics.
+    """
+    commission = transaction_cost_bps / 10_000.0
+    slippage = slippage_bps / 10_000.0
+    cost_model = CostModel(commission=commission, slippage=slippage)
+
+    prices_df = close.to_frame("Close")
+    if high is not None:
+        prices_df["High"] = high
+    if low is not None:
+        prices_df["Low"] = low
+
+    engine = BacktestEngine()
+    return engine.run(
+        prices=prices_df,
+        signal=signal,
+        initial_capital=initial_capital,
+        cost_model=cost_model,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 6. calculate_metrics
+# ---------------------------------------------------------------------------
+
+def calculate_metrics(result: Any) -> Dict[str, Any]:
+    """Extract comprehensive metrics from a :class:`BacktestResult`.
+
+    Extends the built-in ``result.metrics`` dict with derived fields
+    that are not computed by :meth:`Metrics.compute_all`:
+
+    * ``num_trades``  — total number of position changes.
+    * ``turnover``    — average absolute daily position change.
+    * ``exposure``    — fraction of days with a non-zero position.
+
+    Parameters
+    ----------
+    result:
+        A :class:`BacktestResult` instance from :class:`BacktestEngine`.
+
+    Returns
+    -------
+    dict
+        Keys: ``total_return``, ``annualized_return``, ``volatility``,
+        ``sharpe_ratio``, ``sortino_ratio``, ``max_drawdown``,
+        ``calmar_ratio``, ``win_rate``, ``profit_factor``,
+        ``num_trades``, ``turnover``, ``exposure``, ``num_days``.
+    """
+    from alpha_search.backtest.metrics import Metrics
+
+    try:
+        m = dict(result.metrics)
+    except Exception:
+        m = {}
+
+    # num_trades from trade log
+    try:
+        m["num_trades"] = int(len(result.trades)) if hasattr(result, "trades") else 0
+    except Exception:
+        m["num_trades"] = 0
+
+    # Turnover: avg absolute daily position change
+    try:
+        pos = result.positions
+        m["turnover"] = float(pos.diff().abs().mean()) if not pos.empty else 0.0
+    except Exception:
+        m["turnover"] = 0.0
+
+    # Exposure: fraction of days holding a position
+    try:
+        pos = result.positions
+        m["exposure"] = float((pos != 0).mean()) if not pos.empty else 0.0
+    except Exception:
+        m["exposure"] = 0.0
+
+    # Ensure all expected keys are present with float values
+    float_keys = [
+        "total_return", "annualized_return", "volatility",
+        "sharpe_ratio", "sortino_ratio", "max_drawdown",
+        "calmar_ratio", "win_rate", "profit_factor",
+    ]
+    for key in float_keys:
+        val = m.get(key, 0.0)
+        try:
+            m[key] = round(float(val), 6)
+        except (TypeError, ValueError):
+            m[key] = 0.0
+
+    return m
+
+
+# ---------------------------------------------------------------------------
+# 7. export_research_outputs
+# ---------------------------------------------------------------------------
+
+def export_research_outputs(
+    run_results: Dict[str, Any],
+    base_dir: str = "outputs/research_runs",
+) -> str:
+    """Write all research outputs to a timestamped directory.
+
+    Creates::
+
+        <base_dir>/YYYYMMDD_HHMMSS/
+            metadata.json
+            strategy_results_summary.csv
+            momentum_results.csv
+            mean_reversion_results.csv
+            breakout_results.csv
+            trade_log.csv
+            report.md
+            figures/
+                equity_curve.png
+                drawdown_curve.png
+                rolling_sharpe.png
+
+    Parameters
+    ----------
+    run_results:
+        The dictionary returned by :func:`run_real_data_research`.
+    base_dir:
+        Parent directory for research run outputs.
+
+    Returns
+    -------
+    str
+        Path to the timestamped run directory.
+    """
+    import json as _json
+    import os as _os
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    run_dir = _os.path.join(base_dir, ts)
+    fig_dir = _os.path.join(run_dir, "figures")
+    _os.makedirs(fig_dir, exist_ok=True)
+
+    # ---- metadata.json ----
+    meta = {
+        "run_timestamp": ts,
+        "universe": run_results.get("universe", ""),
+        "period": run_results.get("period", ""),
+        "interval": run_results.get("interval", ""),
+        "symbols_requested": run_results.get("symbols_requested", []),
+        "symbols_succeeded": run_results.get("symbols_succeeded", []),
+        "symbols_failed": run_results.get("symbols_failed", []),
+        "transaction_cost_bps": run_results.get("transaction_cost_bps", 10),
+        "slippage_bps": run_results.get("slippage_bps", 10),
+        "disclaimer": (
+            "RESEARCH / EDUCATIONAL PURPOSES ONLY. "
+            "NOT INVESTMENT ADVICE. PAST PERFORMANCE DOES NOT GUARANTEE FUTURE RESULTS."
+        ),
+    }
+    with open(_os.path.join(run_dir, "metadata.json"), "w") as fh:
+        _json.dump(meta, fh, indent=2, default=str)
+
+    # ---- per-strategy CSV + combined summary ----
+    all_metrics_frames: List[pd.DataFrame] = []
+    strategy_keys = ["momentum", "mean_reversion", "breakout"]
+    for key in strategy_keys:
+        strat = run_results.get(key, {})
+        mdf: pd.DataFrame = strat.get("metrics_df", pd.DataFrame())
+        if not mdf.empty:
+            mdf.to_csv(_os.path.join(run_dir, f"{key}_results.csv"), index=True)
+            all_metrics_frames.append(mdf)
+        else:
+            # Write an empty placeholder so callers can detect the file
+            pd.DataFrame().to_csv(_os.path.join(run_dir, f"{key}_results.csv"))
+
+    if all_metrics_frames:
+        summary = pd.concat(all_metrics_frames, ignore_index=True)
+        summary.to_csv(_os.path.join(run_dir, "strategy_results_summary.csv"), index=False)
+    else:
+        pd.DataFrame().to_csv(_os.path.join(run_dir, "strategy_results_summary.csv"))
+
+    # ---- trade_log.csv ----
+    all_trades: List[pd.DataFrame] = []
+    for key in strategy_keys:
+        strat = run_results.get(key, {})
+        for ticker, bt_result in strat.get("backtest_results", {}).items():
+            try:
+                trades = bt_result.trades.copy()
+                trades["strategy"] = key
+                trades["ticker"] = ticker
+                all_trades.append(trades)
+            except Exception:
+                pass
+
+    if all_trades:
+        trade_log = pd.concat(all_trades, ignore_index=True)
+        trade_log.to_csv(_os.path.join(run_dir, "trade_log.csv"), index=False)
+    else:
+        pd.DataFrame(
+            columns=["date", "direction", "price", "position_delta",
+                     "position_after", "strategy", "ticker"]
+        ).to_csv(_os.path.join(run_dir, "trade_log.csv"), index=False)
+
+    # ---- report.md ----
+    _write_research_report(_os.path.join(run_dir, "report.md"), run_results, meta)
+
+    # ---- figures ----
+    _write_research_figures(fig_dir, run_results)
+
+    logger.info("Research outputs written to %s", run_dir)
+    return run_dir
+
+
+def _write_research_report(path: str, results: Dict[str, Any], meta: dict) -> None:
+    """Write a Markdown research report."""
+    now = datetime.now(timezone.utc).isoformat()
+    lines: List[str] = [
+        "# Alpha Search — Real Data Backtesting Report",
+        "",
+        f"**Generated:** {now}",
+        f"**Universe:** {meta.get('universe', '')}  |  "
+        f"**Period:** {meta.get('period', '')}  |  "
+        f"**Interval:** {meta.get('interval', '')}",
+        "",
+        "> **DISCLAIMER:** RESEARCH / EDUCATIONAL PURPOSES ONLY. "
+        "NOT INVESTMENT ADVICE. PAST PERFORMANCE DOES NOT GUARANTEE FUTURE RESULTS.",
+        "",
+        "---",
+        "",
+        "## Data Summary",
+        "",
+        f"- Symbols requested: {len(meta.get('symbols_requested', []))}",
+        f"- Symbols succeeded: {len(meta.get('symbols_succeeded', []))}  "
+        f"({', '.join(meta.get('symbols_succeeded', [])[:10])}{'...' if len(meta.get('symbols_succeeded', [])) > 10 else ''})",
+    ]
+    failed = meta.get("symbols_failed", [])
+    if failed:
+        lines.append(f"- **Symbols failed (skipped, no data fabricated):** {', '.join(failed)}")
+    lines.append("")
+
+    for strategy_key in ["momentum", "mean_reversion", "breakout"]:
+        strat = results.get(strategy_key, {})
+        mdf = strat.get("metrics_df", pd.DataFrame())
+        verdict = strat.get("verdict", "N/A")
+        hypothesis = strat.get("hypothesis", "")
+
+        title = strategy_key.replace("_", " ").title()
+        lines += [
+            f"## {title} Strategy",
+            "",
+            f"**Hypothesis:** {hypothesis}",
+            "",
+            f"**Verdict:** `{verdict}`",
+            "",
+        ]
+
+        if not mdf.empty:
+            lines += [
+                "| Ticker | Sharpe | Total Return | Max DD | Win Rate | Trades |",
+                "|--------|--------|-------------|--------|----------|--------|",
+            ]
+            for idx, row in mdf.iterrows():
+                ticker = row.get("ticker", str(idx))
+                sharpe = row.get("sharpe_ratio", 0.0)
+                ret = row.get("total_return", 0.0)
+                dd = row.get("max_drawdown", 0.0)
+                wr = row.get("win_rate", 0.0)
+                n = int(row.get("num_trades", 0))
+                lines.append(
+                    f"| {ticker} | {sharpe:.2f} | {ret:.2%} | {dd:.2%} | {wr:.2%} | {n} |"
+                )
+            lines.append("")
+
+            avg_sharpe = mdf["sharpe_ratio"].mean() if "sharpe_ratio" in mdf.columns else float("nan")
+            lines.append(
+                f"*Avg Sharpe: {avg_sharpe:.2f}. "
+                "Sharpe < 0 means the strategy lost money on a risk-adjusted basis. "
+                "These are research findings, not recommendations.*"
+            )
+            lines.append("")
+        else:
+            lines.append("*No backtest results available for this strategy.*")
+            lines.append("")
+
+    lines += [
+        "---",
+        "",
+        "*This report is generated by Alpha Search for research and educational purposes only.*",
+        "",
+    ]
+
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+
+
+def _write_research_figures(fig_dir: str, results: Dict[str, Any]) -> None:
+    """Generate and save equity curve, drawdown, and rolling-Sharpe figures."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+    except ImportError:
+        logger.warning("matplotlib not available — skipping figure generation")
+        return
+
+    strategy_keys = ["momentum", "mean_reversion", "breakout"]
+    colours = {"momentum": "#2196F3", "mean_reversion": "#4CAF50", "breakout": "#FF9800"}
+
+    # -- Equity curve --
+    try:
+        fig, ax = plt.subplots(figsize=(12, 5))
+        any_plotted = False
+        for key in strategy_keys:
+            strat = results.get(key, {})
+            for ticker, bt in strat.get("backtest_results", {}).items():
+                try:
+                    eq = bt.equity_curve
+                    if eq is not None and len(eq) > 1:
+                        ax.plot(eq.index, eq.values, label=f"{key}:{ticker}",
+                                color=colours.get(key, None), alpha=0.7, linewidth=1.0)
+                        any_plotted = True
+                except Exception:
+                    pass
+
+        if any_plotted:
+            ax.set_title("Equity Curves — Real Data Backtest")
+            ax.set_ylabel("Portfolio Value ($)")
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+            ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+            plt.xticks(rotation=30)
+            ax.legend(fontsize=7, loc="upper left", ncol=3)
+            ax.grid(True, alpha=0.3)
+        else:
+            ax.text(0.5, 0.5, "No equity curve data available",
+                    transform=ax.transAxes, ha="center", va="center", fontsize=12)
+        plt.tight_layout()
+        plt.savefig(f"{fig_dir}/equity_curve.png", dpi=120)
+        plt.close()
+    except Exception as exc:
+        logger.warning("equity_curve figure failed: %s", exc)
+
+    # -- Drawdown curve --
+    try:
+        fig, ax = plt.subplots(figsize=(12, 4))
+        any_plotted = False
+        for key in strategy_keys:
+            strat = results.get(key, {})
+            for ticker, bt in strat.get("backtest_results", {}).items():
+                try:
+                    eq = bt.equity_curve
+                    if eq is not None and len(eq) > 1:
+                        peak = eq.expanding().max()
+                        dd = (eq - peak) / peak
+                        ax.fill_between(dd.index, dd.values, 0,
+                                        color=colours.get(key, "#888"), alpha=0.35,
+                                        label=f"{key}:{ticker}")
+                        any_plotted = True
+                except Exception:
+                    pass
+
+        if any_plotted:
+            ax.set_title("Drawdown Curves — Real Data Backtest")
+            ax.set_ylabel("Drawdown")
+            ax.yaxis.set_major_formatter(
+                plt.FuncFormatter(lambda y, _: f"{y:.0%}")
+            )
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+            ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+            plt.xticks(rotation=30)
+            ax.legend(fontsize=7, loc="lower left", ncol=3)
+            ax.grid(True, alpha=0.3)
+        else:
+            ax.text(0.5, 0.5, "No drawdown data available",
+                    transform=ax.transAxes, ha="center", va="center", fontsize=12)
+        plt.tight_layout()
+        plt.savefig(f"{fig_dir}/drawdown_curve.png", dpi=120)
+        plt.close()
+    except Exception as exc:
+        logger.warning("drawdown_curve figure failed: %s", exc)
+
+    # -- Rolling Sharpe (60-day) --
+    try:
+        fig, ax = plt.subplots(figsize=(12, 4))
+        any_plotted = False
+        window_rs = 60
+        for key in strategy_keys:
+            strat = results.get(key, {})
+            for ticker, bt in strat.get("backtest_results", {}).items():
+                try:
+                    rets = bt.returns
+                    if rets is not None and len(rets) > window_rs:
+                        roll_mean = rets.rolling(window_rs).mean()
+                        roll_std = rets.rolling(window_rs).std()
+                        roll_sharpe = (roll_mean / roll_std.replace(0, np.nan)) * np.sqrt(252)
+                        ax.plot(roll_sharpe.index, roll_sharpe.values,
+                                label=f"{key}:{ticker}", alpha=0.7, linewidth=1.0)
+                        any_plotted = True
+                except Exception:
+                    pass
+
+        if any_plotted:
+            ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+            ax.axhline(1, color="green", linewidth=0.8, linestyle=":", alpha=0.7)
+            ax.set_title(f"Rolling {window_rs}-Day Sharpe Ratio — Real Data Backtest")
+            ax.set_ylabel("Sharpe (annualised)")
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+            ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+            plt.xticks(rotation=30)
+            ax.legend(fontsize=7, loc="upper left", ncol=3)
+            ax.grid(True, alpha=0.3)
+        else:
+            ax.text(0.5, 0.5, "No returns data available",
+                    transform=ax.transAxes, ha="center", va="center", fontsize=12)
+        plt.tight_layout()
+        plt.savefig(f"{fig_dir}/rolling_sharpe.png", dpi=120)
+        plt.close()
+    except Exception as exc:
+        logger.warning("rolling_sharpe figure failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# 8. run_real_data_research — main orchestrator
+# ---------------------------------------------------------------------------
+
+def run_real_data_research(
+    universe: str = "us_large_cap",
+    period: str = "2y",
+    interval: str = "1d",
+    output_dir: str = "outputs/research_runs",
+    transaction_cost_bps: float = 10.0,
+    slippage_bps: float = 10.0,
+    csv_fallback_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run a complete real-data backtesting research pipeline.
+
+    Fetches real OHLCV data, validates it, generates signals for three
+    strategies (momentum, mean-reversion, breakout), runs vectorized
+    backtests with realistic transaction costs, computes metrics, and
+    exports all results to a timestamped directory.
+
+    **No synthetic data is used.**  Symbols that cannot be fetched are
+    skipped and logged; their absence is reported in the output.
+    Sharpe ratios are reported as-is — no parameter tuning to appear
+    profitable.
+
+    Parameters
+    ----------
+    universe:
+        One of ``"us_large_cap"``, ``"india_equity"``, ``"crypto"``,
+        ``"all"``.
+    period:
+        yfinance history period, e.g. ``"2y"``, ``"1y"``.
+    interval:
+        yfinance bar interval, e.g. ``"1d"``, ``"1h"``.
+    output_dir:
+        Parent directory for timestamped output folders.
+    transaction_cost_bps:
+        One-way commission in basis points (default 10 bps = 0.10%).
+    slippage_bps:
+        One-way slippage estimate in basis points (default 10 bps).
+    csv_fallback_path:
+        Optional path to a CSV file following the schema
+        ``timestamp,symbol,open,high,low,close,volume``.  Used as
+        additional data source if provided.
+
+    Returns
+    -------
+    dict
+        Keys: ``universe``, ``period``, ``interval``, ``symbols_requested``,
+        ``symbols_succeeded``, ``symbols_failed``, ``validation_report``,
+        ``momentum``, ``mean_reversion``, ``breakout``,
+        ``transaction_cost_bps``, ``slippage_bps``,
+        ``output_dir``, ``disclaimer``.
+    """
+    start_time = datetime.now(timezone.utc)
+    symbols = UNIVERSES.get(universe, UNIVERSE_US_LARGE_CAP)
+
+    logger.info("=" * 64)
+    logger.info("Alpha Search — Real Data Research (%s, %s, %s)", universe, period, interval)
+    logger.info("Symbols: %s", symbols)
+    logger.info("=" * 64)
+
+    # ------------------------------------------------------------------
+    # 1. Fetch data
+    # ------------------------------------------------------------------
+    frames, succeeded, failed = fetch_yfinance_ohlcv(symbols, period=period, interval=interval)
+
+    # Merge CSV fallback if provided
+    if csv_fallback_path:
+        csv_frames = load_csv_ohlcv(csv_fallback_path)
+        for sym, df in csv_frames.items():
+            if sym not in frames:
+                frames[sym] = df
+                if sym not in succeeded:
+                    succeeded.append(sym)
+                logger.info("Loaded %s from CSV fallback", sym)
+
+    if not frames:
+        logger.error("No data available — cannot run research")
+        return {
+            "universe": universe, "period": period, "interval": interval,
+            "symbols_requested": symbols, "symbols_succeeded": [],
+            "symbols_failed": symbols, "error": "No data fetched",
+            "disclaimer": "RESEARCH / EDUCATIONAL PURPOSES ONLY.",
+        }
+
+    # ------------------------------------------------------------------
+    # 2. Validate each symbol
+    # ------------------------------------------------------------------
+    validation_report: Dict[str, Dict[str, Any]] = {}
+    valid_frames: Dict[str, pd.DataFrame] = {}
+
+    for sym, df in frames.items():
+        is_valid, warns = validate_ohlcv(df, ticker=sym)
+        validation_report[sym] = {"is_valid": is_valid, "warnings": warns}
+        if warns:
+            for w in warns:
+                logger.warning("Validation: %s", w)
+        if is_valid:
+            valid_frames[sym] = df
+        else:
+            logger.warning("Validation failed for %s — excluding from strategies", sym)
+            if sym in succeeded:
+                succeeded.remove(sym)
+            if sym not in failed:
+                failed.append(sym)
+
+    logger.info(
+        "Validation complete: %d valid, %d excluded",
+        len(valid_frames), len(frames) - len(valid_frames),
+    )
+
+    if not valid_frames:
+        logger.error("All symbols failed validation")
+        return {
+            "universe": universe, "period": period, "interval": interval,
+            "symbols_requested": symbols, "symbols_succeeded": [],
+            "symbols_failed": failed, "validation_report": validation_report,
+            "error": "All symbols failed OHLCV validation",
+            "disclaimer": "RESEARCH / EDUCATIONAL PURPOSES ONLY.",
+        }
+
+    # ------------------------------------------------------------------
+    # 3. Run strategies
+    # ------------------------------------------------------------------
+    def _run_strategy(
+        strategy_name: str,
+        sig_fn,
+    ) -> Dict[str, Any]:
+        """Run one strategy across all valid symbols, aggregate metrics."""
+        backtest_results: Dict[str, Any] = {}
+        all_metrics: List[Dict[str, Any]] = {}
+        no_trade_reasons: Dict[str, str] = {}
+
+        for sym, df in valid_frames.items():
+            close = df["Close"].dropna()
+            high = df["High"].dropna() if "High" in df.columns else None
+            low_s = df["Low"].dropna() if "Low" in df.columns else None
+
+            if len(close) < 30:
+                no_trade_reasons[sym] = f"Only {len(close)} bars (< 30)"
+                continue
+
+            try:
+                if strategy_name == "breakout":
+                    sig = sig_fn(close, high=high, low=low_s)
+                else:
+                    sig = sig_fn(close)
+            except Exception as exc:
+                no_trade_reasons[sym] = f"Signal generation failed: {exc}"
+                logger.warning("Signal failed for %s (%s): %s", sym, strategy_name, exc)
+                continue
+
+            n_signals = int((sig != 0).sum())
+            if n_signals == 0:
+                no_trade_reasons[sym] = (
+                    "Signal is all-zero — no entry condition met. "
+                    "Try a different lookback or threshold."
+                )
+                logger.info(
+                    "%s / %s: zero signals — skipping backtest", sym, strategy_name
+                )
+                continue
+
+            try:
+                result = run_vectorized_backtest(
+                    close=close,
+                    signal=sig,
+                    high=high,
+                    low=low_s,
+                    initial_capital=100_000.0,
+                    transaction_cost_bps=transaction_cost_bps,
+                    slippage_bps=slippage_bps,
+                )
+                backtest_results[sym] = result
+                m = calculate_metrics(result)
+                m["ticker"] = sym
+                m["strategy"] = strategy_name
+                all_metrics[sym] = m  # type: ignore[assignment]
+            except Exception as exc:
+                no_trade_reasons[sym] = f"Backtest failed: {exc}"
+                logger.warning("Backtest failed for %s (%s): %s", sym, strategy_name, exc)
+
+        if no_trade_reasons:
+            for sym, reason in no_trade_reasons.items():
+                logger.info("%s / %s: %s", sym, strategy_name, reason)
+
+        metrics_list = list(all_metrics.values())  # type: ignore[assignment]
+        metrics_df = pd.DataFrame(metrics_list) if metrics_list else pd.DataFrame()
+
+        avg_sharpe = (
+            metrics_df["sharpe_ratio"].mean()
+            if not metrics_df.empty and "sharpe_ratio" in metrics_df.columns
+            else float("nan")
+        )
+        verdict: str
+        if np.isnan(avg_sharpe):
+            verdict = "no_results"
+        elif avg_sharpe > 1.0:
+            verdict = "promising"
+        elif avg_sharpe > 0.0:
+            verdict = "marginal"
+        else:
+            verdict = "unprofitable"
+
+        return {
+            "hypothesis": _STRATEGY_HYPOTHESES.get(strategy_name, ""),
+            "backtest_results": backtest_results,
+            "metrics_df": metrics_df,
+            "verdict": verdict,
+            "avg_sharpe": round(avg_sharpe, 4) if not np.isnan(avg_sharpe) else None,
+            "no_trade_reasons": no_trade_reasons,
+        }
+
+    _STRATEGY_HYPOTHESES = {
+        "momentum": (
+            "Stocks with strong recent momentum continue to outperform "
+            "over the next 1-4 weeks (MA-crossover confirmed)."
+        ),
+        "mean_reversion": (
+            "Prices that deviate significantly below their rolling mean "
+            "tend to revert toward the mean (z-score entry at -2 sigma)."
+        ),
+        "breakout": (
+            "Prices breaking above the N-bar Donchian channel high continue "
+            "trending upward (channel breakout, daily data)."
+        ),
+    }
+
+    logger.info("Running momentum strategy on %d symbols...", len(valid_frames))
+    momentum_result = _run_strategy(
+        "momentum",
+        lambda c: generate_momentum_signal(c, lookback=20, ma_confirm=True),
+    )
+
+    logger.info("Running mean-reversion strategy on %d symbols...", len(valid_frames))
+    mr_result = _run_strategy(
+        "mean_reversion",
+        lambda c: generate_mean_reversion_signal(c, window=20, z_threshold=2.0),
+    )
+
+    logger.info("Running breakout strategy on %d symbols...", len(valid_frames))
+    breakout_result = _run_strategy(
+        "breakout",
+        lambda c, high=None, low=None: generate_breakout_signal(c, high=high, low=low, window=20),
+    )
+
+    # ------------------------------------------------------------------
+    # 4. Assemble results
+    # ------------------------------------------------------------------
+    results: Dict[str, Any] = {
+        "universe": universe,
+        "period": period,
+        "interval": interval,
+        "symbols_requested": symbols,
+        "symbols_succeeded": succeeded,
+        "symbols_failed": failed,
+        "validation_report": validation_report,
+        "momentum": momentum_result,
+        "mean_reversion": mr_result,
+        "breakout": breakout_result,
+        "transaction_cost_bps": transaction_cost_bps,
+        "slippage_bps": slippage_bps,
+        "run_timestamp": start_time.isoformat(),
+        "duration_seconds": (datetime.now(timezone.utc) - start_time).total_seconds(),
+        "disclaimer": (
+            "RESEARCH / EDUCATIONAL PURPOSES ONLY. "
+            "NOT INVESTMENT ADVICE. PAST PERFORMANCE DOES NOT GUARANTEE FUTURE RESULTS."
+        ),
+    }
+
+    # ------------------------------------------------------------------
+    # 5. Export outputs
+    # ------------------------------------------------------------------
+    try:
+        run_dir = export_research_outputs(results, base_dir=output_dir)
+        results["output_dir"] = run_dir
+        logger.info("Outputs written to %s", run_dir)
+    except Exception as exc:
+        logger.warning("export_research_outputs failed: %s", exc)
+        results["output_dir"] = None
+
+    logger.info(
+        "Research complete in %.1fs | momentum=%s | mr=%s | breakout=%s",
+        results["duration_seconds"],
+        momentum_result.get("verdict"),
+        mr_result.get("verdict"),
+        breakout_result.get("verdict"),
+    )
+    return results
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,

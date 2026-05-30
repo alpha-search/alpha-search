@@ -1,0 +1,28 @@
+{
+  "run_timestamp": "2026-05-29T21:45:37Z",
+  "status": "no_data_environment_blocked",
+  "command": "python scripts/run_ai_infra_research.py --period 5y --interval 1d --cost-bps 10 --slippage-bps 10 --top-n 5 --json-summary",
+  "data_source": "yahoo_finance_yfinance_1.3.0",
+  "data_fetch_error": "HTTP Error 403: Host not in allowlist",
+  "symbols_requested": ["NVDA", "AMD", "AVGO", "TSM", "QCOM", "SOXX", "SMH", "QQQ", "SPY"],
+  "symbols_succeeded": [],
+  "symbols_failed": ["NVDA", "AMD", "AVGO", "TSM", "QCOM", "SOXX", "SMH", "QQQ", "SPY"],
+  "skipped_symbols_count": 9,
+  "best_strategy": null,
+  "best_net_sharpe": null,
+  "best_max_drawdown": null,
+  "sharpe_2_achieved_after_costs": false,
+  "promising_strategy_found": false,
+  "benchmark_winner": null,
+  "strategies_executed": 0,
+  "output_dir_from_pipeline": null,
+  "exit_code": 1,
+  "validation": {
+    "compileall": "pass",
+    "unit_tests_ai_infra": "104 passed",
+    "network_required": false
+  },
+  "conclusion": "Pipeline ran correctly but could not fetch any real OHLCV; Yahoo Finance is blocked in this environment (403 Host not in allowlist). No synthetic data was substituted and no metrics were fabricated. No alpha claim can be made from this run.",
+  "next_recommended_experiment": "Re-run on an environment with Yahoo Finance egress (Colab notebook notebooks/02_ai_infrastructure_alpha_research_colab.ipynb or a host with open network), or feed pre-downloaded local OHLCV CSVs. Do not tune parameters until a real-data run produces output.",
+  "note": "Earlier in the session a directory 20260529_023145 with specific benchmark Sharpe figures was referenced; that was a hallucination and is retracted. No such directory or results exist."
+}
