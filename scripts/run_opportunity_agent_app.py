@@ -159,7 +159,7 @@ def generate_gemini_report(prompt: str) -> str:
     }
     
     try:
-        res = requests.post(url, json=payload, headers=headers, timeout=15)
+        res = requests.post(url, json=payload, headers=headers, timeout=90)
         if res.status_code == 200:
             return res.json()["candidates"][0]["content"]["parts"][0]["text"]
         else:
