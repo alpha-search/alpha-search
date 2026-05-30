@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Alpha Search Terminal</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --bg2: #111111;
+      --panel: #141414;
+      --border: #2a2a2a;
+      --border-soft: #1f1f1f;
+      --amber: #ff8c00;
+      --amber-dim: #a55f00;
+      --amber-bright: #ffaa33;
+      --amber-subtle: rgba(255, 140, 0, 0.08);
+      --green: #22ee22;
+      --green-dim: #128812;
+      --red: #ff3b3b;
+      --red-dim: #9a1414;
+      --cyan: #22ccee;
+      --muted: #6e6e6e;
+      --text: #d0d0d0;
+      --heading: #f0f0f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+      font-size: 12px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Command Bar */
+    .command-bar {
+      display: flex;
+      align-items: center;
+      height: 40px;
+      background-color: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 0 12px;
+      gap: 16px;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+
+    .logo-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--amber);
+      box-shadow: 0 0 6px rgba(255, 140, 0, 0.9);
+      border-radius: 50%;
+    }
+
+    .logo-text {
+      color: var(--amber);
+      font-weight: bold;
+      letter-spacing: 0.3em;
+      font-size: 11px;
+    }
+
+    .input-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      position: relative;
+    }
+
+    .cmd-label {
+      color: var(--amber-dim);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+    }
+
+    .cmd-arrow {
+      color: var(--amber);
+    }
+
+    .cmd-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--amber-bright);
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-family: inherit;
+    }
+
+    .cmd-input:focus {
+      outline: none;
+    }
+
+    .go-btn {
+      color: var(--amber);
+      font-weight: bold;
+      padding: 2px 8px;
+      border: 1px solid var(--amber-dim);
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s;
+    }
+
+    .go-btn:hover {
+      background-color: var(--amber-subtle);
+    }
+
+    /* Workspace Tabs */
+    .tabs-bar {
+      display: flex;
+      height: 30px;
+      background-color: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 8px;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      height: 24px;
+      padding: 0 16px;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .tab-btn.active {
+      color: var(--amber);
+      background-color: var(--bg);
+      border-top: 2px solid var(--amber);
+      height: 26px;
+    }
+
+    /* Main Content Area */
+    .workspace {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      padding: 8px;
+      position: relative;
+    }
+
+    .panel {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      gap: 12px;
+    }
+
+    .panel.active {
+      display: flex;
+    }
+
+    /* Panel Header */
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-b: 1px solid var(--border);
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      color: var(--amber);
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      font-weight: bold;
+    }
+
+    .panel-subtitle {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    /* Sector Grid & Builder List */
+    .builder-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      min-h: 0;
+      min-height: 0;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      background-color: var(--panel);
+      min-height: 0;
+      border-radius: 2px;
+    }
+
+    .card-header {
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+
+    .card-title {
+      color: var(--amber-bright);
+      font-weight: bold;
+      letter-spacing: 0.1em;
+    }
+
+    .search-box {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+
+    .search-input {
+      flex: 1;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+      color: var(--heading);
+      font-family: inherit;
+      font-size: 11px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--amber-dim);
+    }
+
+    .ticker-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Drag Item */
+    .ticker-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px;
+      border: 1px solid var(--border-soft);
+      background-color: var(--bg2);
+      user-select: none;
+      cursor: grab;
+      transition: all 0.15s;
+    }
+
+    .ticker-item:hover {
+      border-color: var(--amber);
+      background-color: var(--bg);
+    }
+
+    .ticker-item.added {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .ticker-symbol {
+      color: var(--amber);
+      font-weight: bold;
+      width: 70px;
+    }
+
+    .ticker-name {
+      color: var(--heading);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-right: 8px;
+    }
+
+    .ticker-sector {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    /* Selected Zone */
+    .drop-zone {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .drop-placeholder {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 2px dashed var(--border-soft);
+      color: var(--muted);
+      padding: 24px;
+      text-align: center;
+      border-radius: 2px;
+    }
+
+    .drop-placeholder-sub {
+      font-size: 10px;
+      margin-top: 4px;
+      color: var(--amber-dim);
+    }
+
+    .selected-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px;
+      border: 1px solid var(--border-soft);
+      background-color: var(--bg);
+      border-radius: 2px;
+    }
+
+    .selected-item:hover {
+      border-color: var(--red);
+    }
+
+    .remove-btn {
+      color: var(--red);
+      cursor: pointer;
+      font-weight: bold;
+      border: none;
+      background: none;
+      padding: 0 4px;
+    }
+
+    /* Thematic Config Settings */
+    .config-panel {
+      background-color: var(--bg2);
+      border: 1px solid var(--border);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .config-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .config-label {
+      color: var(--amber-dim);
+      font-weight: bold;
+      font-size: 10px;
+      width: 120px;
+    }
+
+    .config-input {
+      flex: 1;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      color: var(--heading);
+      font-family: inherit;
+    }
+
+    .config-input:focus {
+      outline: none;
+      border-color: var(--amber);
+    }
+
+    .scan-btn {
+      padding: 6px 20px;
+      font-weight: bold;
+      text-transform: uppercase;
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      background: transparent;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(255, 140, 0, 0.15);
+      transition: all 0.15s;
+    }
+
+    .scan-btn:hover:not(:disabled) {
+      background-color: var(--amber);
+      color: var(--bg);
+    }
+
+    .scan-btn:disabled {
+      border-color: var(--border);
+      color: var(--muted);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Category buttons */
+    .cat-btn {
+      padding: 3px 10px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: bold;
+    }
+
+    .cat-btn.active {
+      border-color: var(--amber);
+      color: var(--amber);
+      background-color: var(--amber-subtle);
+    }
+
+    /* Scorecard Grid Table */
+    .grid-data {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    .grid-data th {
+      border-bottom: 1px solid var(--border);
+      padding: 6px 8px;
+      color: var(--amber);
+      font-weight: bold;
+    }
+
+    .grid-data td {
+      border-bottom: 1px solid var(--border-soft);
+      padding: 6px 8px;
+      white-space: nowrap;
+    }
+
+    .grid-data tr:hover td {
+      background-color: var(--amber-subtle);
+    }
+
+    .num {
+      font-family: monospace;
+    }
+
+    .up {
+      color: var(--green);
+    }
+
+    .down {
+      color: var(--red);
+    }
+
+    .neutral {
+      color: var(--text);
+    }
+
+    /* Report markdown styling */
+    .report-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+    }
+
+    .report-content h1 {
+      color: var(--amber);
+      font-size: 14px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+      margin: 16px 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .report-content h2 {
+      color: var(--amber-bright);
+      font-size: 12px;
+      margin: 12px 0 6px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .report-content p {
+      line-height: 1.6;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .report-content ul {
+      margin-left: 20px;
+      margin-bottom: 8px;
+    }
+
+    .report-content li {
+      margin-bottom: 4px;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--amber-dim);
+    }
+
+    /* Loading overlay */
+    .loading-overlay {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(10, 10, 10, 0.85);
+      z-index: 100;
+      gap: 12px;
+    }
+
+    .loading-spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--amber);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Status Bar */
+    .status-bar {
+      height: 20px;
+      background-color: var(--panel);
+      border-top: 1px solid var(--border);
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .status-list {
+      display: flex;
+      gap: 12px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .status-dot.active {
+      background-color: var(--green);
+      box-shadow: 0 0 4px var(--green);
+    }
+
+    .status-dot.error {
+      background-color: var(--red);
+      box-shadow: 0 0 4px var(--red);
+    }
+
+    /* Quote Recap Panel */
+    .quote-recap {
+      border: 1px solid var(--border);
+      background-color: var(--panel);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .quote-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .quote-field {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 4px;
+    }
+
+    .quote-label {
+      color: var(--muted);
+    }
+
+    .quote-val {
+      color: var(--heading);
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Command Bar -->
+  <div class="command-bar">
+    <div class="logo-container">
+      <div class="logo-dot"></div>
+      <span class="logo-text">ALPHA SEARCH TERMINAL</span>
+    </div>
+    <div class="input-container">
+      <span class="cmd-label">CMD</span>
+      <span class="cmd-arrow">></span>
+      <input type="text" id="cmdInput" class="cmd-input" placeholder="TRY: CC | BUILD | SCAN | HELP | AAPL">
+      <div class="go-btn" onclick="executeCommand()">GO</div>
+    </div>
+  </div>
+
+  <!-- Workspace Tabs -->
+  <div class="tabs-bar" id="tabsBar">
+    <button class="tab-btn active" onclick="switchTab('CC')">CC: Command Center</button>
+    <button class="tab-btn" onclick="switchTab('BUILD')">BUILD: Universe Builder</button>
+    <button class="tab-btn" onclick="switchTab('SCAN')">SCAN: Thematic Scanner</button>
+  </div>
+
+  <!-- Workspace Content -->
+  <div class="workspace">
+    <div id="loadingOverlay" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div id="loadingText" style="color: var(--amber); font-weight: bold; uppercase: true;">Loading...</div>
+    </div>
+
+    <!-- Command Center Panel (CC) -->
+    <div id="panel-CC" class="panel active">
+      <div class="panel-header">
+        <span class="panel-title">COMMAND CENTER</span>
+        <span class="panel-subtitle">MARKET BRIEFING · LOCAL CACHE</span>
+      </div>
+
+      <div class="quote-recap" id="briefingPanel">
+        <div style="color: var(--amber); font-weight: bold; margin-bottom: 4px;">GLOBAL MARKET WATCH</div>
+        <div class="quote-grid">
+          <div class="quote-field"><span class="quote-label">S&P 500</span><span class="quote-val num text-term-green">5,432.12</span></div>
+          <div class="quote-field"><span class="quote-label">NASDAQ</span><span class="quote-val num text-term-green">18,620.45</span></div>
+          <div class="quote-field"><span class="quote-label">US 10Y Yield</span><span class="quote-val num">4.42%</span></div>
+          <div class="quote-field"><span class="quote-label">VIX Index</span><span class="quote-val num text-term-red">12.45</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="flex: 1;">
+        <div class="card-header">
+          <span class="card-title">Welcome to Alpha Search Terminal</span>
+        </div>
+        <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px; line-height: 1.6;">
+          <p>This Bloomberg-style workspace connects your quantitative investment models directly to your web browser.</p>
+          <div style="background-color: var(--bg2); border: 1px solid var(--border-soft); padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-weight: bold; color: var(--amber-bright);">QUICKSTART INSTRUCTIONS:</div>
+            <div>1. Click the <strong>BUILD</strong> tab or type <strong>BUILD</strong> in the command bar to open the Universe Builder.</div>
+            <div>2. Drag and drop stocks from the categories on the left into the target zone on the right.</div>
+            <div>3. Enter a custom thematic narrative (e.g. <i>liquid cooling for AI servers</i>) and click run.</div>
+            <div>4. The terminal will route you to the <strong>SCAN</strong> panel to present opportunity scorecards and Gemini analyst reports.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Universe Builder Panel (BUILD) -->
+    <div id="panel-BUILD" class="panel">
+      <div class="panel-header">
+        <span class="panel-title">UNIVERSE BUILDER</span>
+        <span class="panel-subtitle">DYNAMIC COHORT PORTFOLIO CONSTRUCTOR</span>
+      </div>
+
+      <div class="config-panel">
+        <div class="config-row">
+          <span class="config-label">THEMATIC QUERY</span>
+          <input type="text" id="themeInput" class="config-input" value="liquid cooling for artificial intelligence server infrastructure">
+          <button class="scan-btn" id="runScanBtn" onclick="triggerQuantScan()">Run Quant Scan</button>
+        </div>
+      </div>
+
+      <div class="builder-grid">
+        <!-- Sources -->
+        <div class="card">
+          <div class="card-header" style="padding: 4px;">
+            <div style="display: flex; gap: 4px;" id="categoryTabs">
+              <!-- Dynamically populated categories -->
+            </div>
+          </div>
+          <div class="search-box">
+            <input type="text" id="sourceSearch" class="search-input" placeholder="FILTER SOURCE CONSTITUENTS..." oninput="filterSourceTickers()">
+            <button onclick="addAllFiltered()" style="background: none; border: 1px solid var(--green-dim); color: var(--green); padding: 0 8px; font-family: inherit; font-size: 10px; cursor: pointer;">Add All</button>
+          </div>
+          <div class="ticker-list" id="sourceTickerList">
+            <!-- Dynamically populated list -->
+          </div>
+        </div>
+
+        <!-- Target Zone -->
+        <div class="card" ondragover="allowDrop(event)" ondrop="dropTicker(event)">
+          <div class="card-header">
+            <span class="card-title" id="targetHeader">TARGET SCAN UNIVERSE (9)</span>
+            <button onclick="clearSelectedUniverse()" style="background: none; border: 1px solid var(--red-dim); color: var(--red); padding: 2px 8px; font-family: inherit; font-size: 10px; cursor: pointer;">Clear All</button>
+          </div>
+          <div class="drop-zone" id="selectedTickerList">
+            <!-- Selected items -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thematic Scanner Panel (SCAN) -->
+    <div id="panel-SCAN" class="panel">
+      <div class="panel-header">
+        <span class="panel-title">THEMATIC SCANNER</span>
+        <span class="panel-subtitle" id="scanSubHeader">SCORECARD & AI ASSESSMENT</span>
+      </div>
+
+      <!-- Opportunities Scorecard Table -->
+      <div class="card" style="max-height: 45%; flex-shrink: 0;">
+        <div class="card-header">
+          <span class="card-title">Quantitative Opportunity Matrix</span>
+          <span style="color: var(--muted); font-size: 10px;">SORTED BY OVERALL OPPORTUNITY SCORE</span>
+        </div>
+        <div style="overflow: auto; padding: 4px;">
+          <table class="grid-data" id="scorecardTable">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th style="text-align: right;">Price</th>
+                <th style="text-align: right;">Vol (63d)</th>
+                <th style="text-align: right;">21d Vol</th>
+                <th style="text-align: right;">Momentum</th>
+                <th style="text-align: right;">Z-Score</th>
+                <th style="text-align: right;">Dist High</th>
+                <th style="text-align: right;">Beta</th>
+                <th style="text-align: right;">Avg Corr</th>
+                <th style="text-align: center;">Uncorr?</th>
+                <th style="text-align: right;">X Sentiment</th>
+                <th style="text-align: right;">Patents YoY</th>
+                <th style="text-align: right;">Insider Ratio</th>
+                <th>Opportunity Type</th>
+                <th style="text-align: right;">Score</th>
+              </tr>
+            </thead>
+            <tbody id="scorecardBody">
+              <!-- Dynamically populated scorecard row items -->
+              <tr><td colspan="15" style="text-align: center; color: var(--muted); padding: 20px;">No scan executed. Select tickers in BUILD and run scan.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AI Report Panel -->
+      <div class="card" style="flex: 1;">
+        <div class="card-header">
+          <span class="card-title">AI Analyst Report</span>
+          <span style="color: var(--muted); font-size: 10px;">POWERED BY GEMINI 2.5 FLASH</span>
+        </div>
+        <div class="report-container">
+          <div id="reportViewer" class="report-content">
+            <div style="color: var(--muted); text-align: center; padding-top: 40px;">No analyst report generated. Run a scan to synthesize analysis.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quote Recap Panel (QR) -->
+    <div id="panel-QR" class="panel">
+      <div class="panel-header">
+        <span class="panel-title" id="qrTitle">QUOTE RECAP</span>
+        <span class="panel-subtitle">REAL-TIME DATA OVERVIEW</span>
+      </div>
+      <div class="quote-recap" id="qrData">
+        <!-- Quote recap data fields -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-list">
+      <div class="status-item">
+        <span class="status-dot active" id="dot-av"></span>
+        <span>ALPHA VANTAGE</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot active" id="dot-tavily"></span>
+        <span>TAVILY SEARCH</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot active" id="dot-x"></span>
+        <span>X API (TWITTER)</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot active" id="dot-gemini"></span>
+        <span>GEMINI LLM</span>
+      </div>
+    </div>
+    <div>ACTIVE WORKSPACE · ALPHA SEARCH AGENT SYSTEM</div>
+  </div>
+
+  <script>
+    // State Store
+    const state = {
+      activeTab: 'CC',
+      themeQuery: 'liquid cooling for artificial intelligence server infrastructure',
+      selectedTickers: ["NVDA", "MSFT", "VRT", "AMZN", "AVGO", "SMCI", "AAPL", "COST", "WMT"],
+      sectorsData: {},
+      activeCategory: '',
+      scanResults: [],
+      report: '',
+      credentialsStatus: { av: true, tavily: true, x: true, gemini: true }
+    };
+
+    // Initialize UI on load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSectors();
+      loadCredentialsStatus();
+      updateSelectedTickersUI();
+      
+      // Setup Command Bar input listeners
+      const cmdInput = document.getElementById('cmdInput');
+      cmdInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          executeCommand();
+        }
+      });
+    });
+
+    // Load sectors for drag-drop list
+    function loadSectors() {
+      showLoading('Loading sectors from FastAPI backend...');
+      fetch('/api/v1/sectors')
+        .then(res => res.json())
+        .then(body => {
+          hideLoading();
+          state.sectorsData = body.results || {};
+          const categories = Object.keys(state.sectorsData);
+          if (categories.length > 0) {
+            populateCategoryTabs(categories);
+            switchCategory(categories[0]);
+          }
+        })
+        .catch(err => {
+          hideLoading();
+          console.error("Failed to load sectors:", err);
+        });
+    }
+
+    // Load credentials health status
+    function loadCredentialsStatus() {
+      // Mocked green status representing fully operational credentials from python checks
+      document.getElementById('dot-av').className = 'status-dot active';
+      document.getElementById('dot-tavily').className = 'status-dot active';
+      document.getElementById('dot-x').className = 'status-dot active';
+      document.getElementById('dot-gemini').className = 'status-dot active';
+    }
+
+    function populateCategoryTabs(categories) {
+      const container = document.getElementById('categoryTabs');
+      container.innerHTML = '';
+      categories.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = 'cat-btn';
+        btn.id = `cat-${cat}`;
+        btn.textContent = cat;
+        btn.onclick = () => switchCategory(cat);
+        container.appendChild(btn);
+      });
+    }
+
+    function switchCategory(cat) {
+      // Toggle category tab active classes
+      const tabs = document.querySelectorAll('.cat-btn');
+      tabs.forEach(t => t.classList.remove('active'));
+      
+      const activeBtn = document.getElementById(`cat-${cat}`);
+      if (activeBtn) activeBtn.classList.add('active');
+      
+      state.activeCategory = cat;
+      filterSourceTickers();
+    }
+
+    function filterSourceTickers() {
+      const list = document.getElementById('sourceTickerList');
+      const search = document.getElementById('sourceSearch').value.toLowerCase();
+      list.innerHTML = '';
+      
+      const tickers = state.sectorsData[state.activeCategory] || [];
+      const filtered = tickers.filter(item => 
+        item.ticker.toLowerCase().includes(search) || 
+        item.name.toLowerCase().includes(search)
+      );
+
+      filtered.forEach(item => {
+        const added = state.selectedTickers.includes(item.ticker);
+        const div = document.createElement('div');
+        div.className = `ticker-item ${added ? 'added' : ''}`;
+        if (!added) {
+          div.setAttribute('draggable', 'true');
+          div.addEventListener('dragstart', (e) => handleDragStart(e, item.ticker));
+          div.onclick = () => selectTicker(item.ticker);
+        }
+        
+        div.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="ticker-symbol">${item.ticker}</span>
+            <span class="ticker-name">${item.name}</span>
+          </div>
+          <span class="ticker-sector">${item.sector}</span>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    // Drag and Drop
+    function handleDragStart(e, ticker) {
+      e.dataTransfer.setData('text/plain', ticker);
+    }
+
+    function allowDrop(e) {
+      e.preventDefault();
+    }
+
+    function dropTicker(e) {
+      e.preventDefault();
+      const ticker = e.dataTransfer.getData('text/plain');
+      if (ticker) {
+        selectTicker(ticker);
+      }
+    }
+
+    function selectTicker(ticker) {
+      if (!state.selectedTickers.includes(ticker)) {
+        state.selectedTickers.push(ticker);
+        updateSelectedTickersUI();
+        filterSourceTickers();
+      }
+    }
+
+    function removeTicker(ticker) {
+      state.selectedTickers = state.selectedTickers.filter(t => t !== ticker);
+      updateSelectedTickersUI();
+      filterSourceTickers();
+    }
+
+    function addAllFiltered() {
+      const search = document.getElementById('sourceSearch').value.toLowerCase();
+      const list = state.sectorsData[state.activeCategory] || [];
+      const filtered = list.filter(item => 
+        item.ticker.toLowerCase().includes(search) || 
+        item.name.toLowerCase().includes(search)
+      );
+      
+      filtered.forEach(item => {
+        if (!state.selectedTickers.includes(item.ticker)) {
+          state.selectedTickers.push(item.ticker);
+        }
+      });
+      updateSelectedTickersUI();
+      filterSourceTickers();
+    }
+
+    function clearSelectedUniverse() {
+      state.selectedTickers = [];
+      updateSelectedTickersUI();
+      filterSourceTickers();
+    }
+
+    function updateSelectedTickersUI() {
+      const list = document.getElementById('selectedTickerList');
+      const header = document.getElementById('targetHeader');
+      
+      header.textContent = `TARGET SCAN UNIVERSE (${state.selectedTickers.length})`;
+      list.innerHTML = '';
+      
+      if (state.selectedTickers.length === 0) {
+        list.innerHTML = `
+          <div class="drop-placeholder">
+            <span>DRAG TICKERS HERE FROM THE LEFT PANEL</span>
+            <div class="drop-placeholder-sub">OR CLICK THEM TO QUICK ADD</div>
+          </div>
+        `;
+        return;
+      }
+      
+      state.selectedTickers.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'selected-item';
+        div.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="ticker-symbol" style="color: var(--amber-bright);">${t}</span>
+            <span class="ticker-name" style="font-size: 11px;">${t}</span>
+          </div>
+          <button class="remove-btn" onclick="removeTicker('${t}')">✕</button>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    // Trigger Opportunity Scanning
+    function triggerQuantScan() {
+      if (state.selectedTickers.length === 0) {
+        alert("Please select at least one ticker for the scanning cohort.");
+        return;
+      }
+
+      const themeInput = document.getElementById('themeInput').value;
+      state.themeQuery = themeInput;
+      
+      switchTab('SCAN');
+      showLoading('Executing Stock Opportunity Agent Scan... Enrolling quantitative factors, pruning correlations & querying Gemini.');
+      
+      fetch('/api/v1/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers: state.selectedTickers, theme: themeInput })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("Quant scan server failed.");
+        return res.json();
+      })
+      .then(body => {
+        hideLoading();
+        const results = body.results;
+        state.scanResults = results.data;
+        state.report = results.report;
+        
+        updateScorecardUI();
+        updateReportUI();
+      })
+      .catch(err => {
+        hideLoading();
+        alert("Scan Execution Error: " + err.message);
+      });
+    }
+
+    function updateScorecardUI() {
+      const body = document.getElementById('scorecardBody');
+      const subHeader = document.getElementById('scanSubHeader');
+      
+      subHeader.textContent = `SCORECARD & AI ASSESSMENT · THEME: "${state.themeQuery.toUpperCase()}"`;
+      body.innerHTML = '';
+      
+      if (state.scanResults.length === 0) {
+        body.innerHTML = '<tr><td colspan="15" style="text-align: center; color: var(--muted); padding: 20px;">No scan executed. Select tickers in BUILD and run scan.</td></tr>';
+        return;
+      }
+      
+      state.scanResults.forEach(row => {
+        const tr = document.createElement('tr');
+        
+        // formats
+        const price = fmtPrice(row.Current_Close);
+        const medVol = `$${row.Med_Dollar_Vol_63d_M.toFixed(1)}M`;
+        const vol21 = fmtPct(row.Volatility_21d_Ann * 100);
+        const mom = fmtPct(row.Momentum_12_1M * 100);
+        const z = row.Z_Score_20d.toFixed(2);
+        const dist = fmtPct(row.Dist_to_20d_High_Pct * 100);
+        const beta = row.Beta_vs_SPY.toFixed(2);
+        const avgCorr = row.Mean_Pairwise_Correlation.toFixed(2);
+        const uncorrDot = row.Is_Selected_Uncorrelated === 1 ? '<span class="up">●</span>' : '<span class="num text-term-muted">○</span>';
+        const sentiment = (row.Social_Sentiment_Score > 0 ? '+' : '') + row.Social_Sentiment_Score.toFixed(2);
+        const patent = fmtPct(row.Patent_YoY_Growth * 100);
+        const insider = (row.Insider_Net_Buy_Ratio > 0 ? '+' : '') + row.Insider_Net_Buy_Ratio.toFixed(2);
+        
+        let typeClass = 'neutral';
+        if (row.Opportunity_Type === 'Momentum Breakout') typeClass = 'up';
+        else if (row.Opportunity_Type === 'Mean Reversion Dip') typeClass = 'text-term-cyan';
+        
+        tr.innerHTML = `
+          <td class="num text-term-amber font-semibold">${row.Ticker}</td>
+          <td class="num" style="text-align: right;">${price}</td>
+          <td class="num" style="text-align: right; color: var(--muted);">${medVol}</td>
+          <td class="num" style="text-align: right;">${vol21}</td>
+          <td class="num ${row.Momentum_12_1M >= 0 ? 'up' : 'down'}" style="text-align: right;">${mom}</td>
+          <td class="num ${row.Z_Score_20d <= -1.25 ? 'up' : row.Z_Score_20d >= 1.5 ? 'down' : ''}" style="text-align: right;">${z}</td>
+          <td class="num" style="text-align: right;">${dist}</td>
+          <td class="num" style="text-align: right; color: var(--muted);">${beta}</td>
+          <td class="num" style="text-align: right; color: var(--muted);">${avgCorr}</td>
+          <td style="text-align: center;">${uncorrDot}</td>
+          <td class="num ${row.Social_Sentiment_Score > 0 ? 'up' : row.Social_Sentiment_Score < 0 ? 'down' : ''}" style="text-align: right;">${sentiment}</td>
+          <td class="num" style="text-align: right;">${patent}</td>
+          <td class="num ${row.Insider_Net_Buy_Ratio > 0 ? 'up' : row.Insider_Net_Buy_Ratio < 0 ? 'down' : ''}" style="text-align: right;">${insider}</td>
+          <td class="${typeClass}" style="font-weight: bold;">${row.Opportunity_Type}</td>
+          <td class="num" style="text-align: right; color: var(--amber); font-weight: bold;">${row.Overall_Opportunity_Score.toFixed(2)}</td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    function updateReportUI() {
+      const viewer = document.getElementById('reportViewer');
+      viewer.innerHTML = '';
+      
+      if (!state.report) {
+        viewer.innerHTML = '<div style="color: var(--muted); text-align: center; padding-top: 40px;">No analyst report generated. Run a scan to synthesize analysis.</div>';
+        return;
+      }
+      
+      const elements = parseMarkdown(state.report);
+      viewer.appendChild(elements);
+    }
+
+    function parseMarkdown(md) {
+      const container = document.createElement('div');
+      const lines = md.split('\n');
+      
+      let inTable = false;
+      let tableRows = [];
+      
+      const flushTable = () => {
+        if (tableRows.length > 0) {
+          const table = document.createElement('table');
+          table.className = 'grid-data';
+          table.style.margin = '12px 0';
+          
+          const thead = document.createElement('thead');
+          const tbody = document.createElement('tbody');
+          
+          // headers
+          const thr = document.createElement('tr');
+          tableRows[0].forEach((col, i) => {
+            const th = document.createElement('th');
+            th.textContent = col.trim();
+            if (i > 0) th.style.textAlign = 'right';
+            thr.appendChild(th);
+          });
+          thead.appendChild(thr);
+          
+          // rows
+          tableRows.slice(2).forEach(row => {
+            const tr = document.createElement('tr');
+            row.forEach((cell, i) => {
+              const td = document.createElement('td');
+              td.textContent = cell.trim();
+              if (i > 0) {
+                td.className = 'num';
+                td.style.textAlign = 'right';
+              } else {
+                td.style.color = 'var(--heading)';
+              }
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          
+          table.appendChild(thead);
+          table.appendChild(tbody);
+          container.appendChild(table);
+          
+          tableRows = [];
+        }
+        inTable = false;
+      };
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        
+        if (trimmed.startsWith('|')) {
+          inTable = true;
+          const cols = trimmed.split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1);
+          tableRows.push(cols);
+          return;
+        } else if (inTable) {
+          flushTable();
+        }
+        
+        if (trimmed === '') {
+          return;
+        }
+        
+        if (trimmed.startsWith('# ')) {
+          const h1 = document.createElement('h1');
+          h1.textContent = trimmed.slice(2);
+          container.appendChild(h1);
+        } else if (trimmed.startsWith('## ')) {
+          const h2 = document.createElement('h2');
+          h2.textContent = trimmed.slice(3);
+          container.appendChild(h2);
+        } else if (trimmed.startsWith('### ')) {
+          const h3 = document.createElement('h3');
+          h3.textContent = trimmed.slice(4);
+          container.appendChild(h3);
+        } else if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+          const li = document.createElement('div');
+          li.style.display = 'flex';
+          li.style.gap = '8px';
+          li.style.paddingLeft = '16px';
+          li.style.margin = '4px 0';
+          li.innerHTML = `<span style="color: var(--amber);">•</span><span>${parseBoldText(trimmed.slice(2))}</span>`;
+          container.appendChild(li);
+        } else {
+          const p = document.createElement('p');
+          p.style.margin = '6px 0';
+          p.innerHTML = parseBoldText(trimmed);
+          container.appendChild(p);
+        }
+      });
+      
+      if (inTable) flushTable();
+      return container;
+    }
+
+    function parseBoldText(txt) {
+      return txt.replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--heading); font-weight: bold;">$1</strong>');
+    }
+
+    // Formatters
+    function fmtPrice(val, decimals = 2) {
+      if (val == null || isNaN(val)) return '—';
+      return '$' + val.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    function fmtPct(val) {
+      if (val == null || isNaN(val)) return '—';
+      return (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
+    }
+
+    // Navigation and tab switches
+    function switchTab(tabId) {
+      // Update tab buttons
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      tabBtns.forEach(btn => {
+        if (btn.textContent.includes(tabId)) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      // Update active panel
+      const panels = document.querySelectorAll('.panel');
+      panels.forEach(p => {
+        if (p.id === `panel-${tabId}`) {
+          p.classList.add('active');
+        } else {
+          p.classList.remove('active');
+        }
+      });
+
+      state.activeTab = tabId;
+    }
+
+    // Command Bar Routing
+    function executeCommand() {
+      const input = document.getElementById('cmdInput');
+      const raw = input.value.trim().toUpperCase();
+      if (!raw) return;
+      
+      input.value = '';
+      
+      if (raw === 'CC') {
+        switchTab('CC');
+      } else if (raw === 'BUILD') {
+        switchTab('BUILD');
+      } else if (raw === 'SCAN') {
+        switchTab('SCAN');
+      } else if (raw === 'HELP') {
+        switchTab('CC');
+        alert("Commands available:\\n- CC: Command Center\\n- BUILD: Universe Builder\\n- SCAN: Thematic Scanner\\n- <TICKER>: Quote recap (e.g. AAPL, MSFT)");
+      } else {
+        // Query quote recap for ticker
+        loadQuoteRecap(raw);
+      }
+    }
+
+    function loadQuoteRecap(symbol) {
+      showLoading(`Fetching quote data for ${symbol}...`);
+      fetch(`/api/v1/equity/price/quote?symbol=${symbol}`)
+        .then(res => res.json())
+        .then(body => {
+          hideLoading();
+          const q = body.results[0];
+          if (!q || !q.last_price) {
+            alert(`Ticker ${symbol} not found.`);
+            return;
+          }
+          
+          switchTab('QR');
+          
+          document.getElementById('qrTitle').textContent = `${q.symbol} - ${q.name || symbol} (${q.exchange})`;
+          
+          const chg = q.last_price - q.prev_close;
+          const chgPct = (chg / q.prev_close) * 100;
+          const dirClass = chg >= 0 ? 'up' : 'down';
+          const chgSign = chg >= 0 ? '+' : '';
+          
+          const container = document.getElementById('qrData');
+          container.innerHTML = `
+            <div style="font-size: 14px; font-weight: bold; color: var(--amber-bright); margin-bottom: 8px;">PRICE SUMMARY</div>
+            <div class="quote-grid">
+              <div class="quote-field"><span class="quote-label">Last Price</span><span class="quote-val num">${fmtPrice(q.last_price)}</span></div>
+              <div class="quote-field"><span class="quote-label">Change</span><span class="quote-val num ${dirClass}">${chgSign}${chg.toFixed(2)}</span></div>
+              <div class="quote-field"><span class="quote-label">Change %</span><span class="quote-val num ${dirClass}">${chgSign}${chgPct.toFixed(2)}%</span></div>
+              <div class="quote-field"><span class="quote-label">Volume</span><span class="quote-val num">${q.volume ? q.volume.toLocaleString() : '—'}</span></div>
+              <div class="quote-field"><span class="quote-label">Open</span><span class="quote-val num">${fmtPrice(q.open)}</span></div>
+              <div class="quote-field"><span class="quote-label">High</span><span class="quote-val num">${fmtPrice(q.high)}</span></div>
+              <div class="quote-field"><span class="quote-label">Low</span><span class="quote-val num">${fmtPrice(q.low)}</span></div>
+              <div class="quote-field"><span class="quote-label">Avg Volume</span><span class="quote-val num">${q.volume_average ? q.volume_average.toLocaleString() : '—'}</span></div>
+              <div class="quote-field"><span class="quote-label">50d MA</span><span class="quote-val num">${fmtPrice(q.ma_50d)}</span></div>
+              <div class="quote-field"><span class="quote-label">200d MA</span><span class="quote-val num">${fmtPrice(q.ma_200d)}</span></div>
+              <div class="quote-field"><span class="quote-label">52w High</span><span class="quote-val num">${fmtPrice(q.year_high)}</span></div>
+              <div class="quote-field"><span class="quote-label">52w Low</span><span class="quote-val num">${fmtPrice(q.year_low)}</span></div>
+            </div>
+          `;
+        })
+        .catch(err => {
+          hideLoading();
+          alert(`Error fetching ${symbol}: ` + err.message);
+        });
+    }
+
+    // Loading Overlays
+    function showLoading(msg) {
+      document.getElementById('loadingText').textContent = msg;
+      document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+
+    function hideLoading() {
+      document.getElementById('loadingOverlay').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

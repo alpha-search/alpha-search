@@ -1,0 +1,50 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Logs and temporary
+*.log
+/tmp/
+/.playwright-mcp/
+.claude/
+
+# Local test screenshots
+/app/*.png
+/v2-*.png
+/v3-*.png
+/bbterminal-*.png
+
+# Upstream OpenBB source — users clone it themselves if needed
+/OpenBB/
+
+# Secrets (never commit)
+.env
+.env.local
+*.key
+*.pem
+
+# User-specific OpenBB settings (keeps keys out of repo)
+user_settings.json
+
+# Creator's private notes
+VIDEO_SCRIPT.md
+*.private.md
