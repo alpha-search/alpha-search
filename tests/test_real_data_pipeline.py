@@ -431,7 +431,7 @@ class TestRunVectorizedBacktest:
         result = run_vectorized_backtest(close=df["Close"], signal=signal)
         dd = result.metrics["max_drawdown"]
         assert np.isfinite(dd), "max_drawdown must be finite"
-        assert dd >= 0, "max_drawdown magnitude must be non-negative"
+        assert dd <= 0, "max_drawdown magnitude must be non-positive"
 
     def test_cost_bps_applied(self) -> None:
         """Backtest with zero costs should have higher or equal equity than with costs."""
@@ -487,7 +487,7 @@ class TestCalculateMetrics:
         metrics = calculate_metrics(result)
         dd = metrics["max_drawdown"]
         assert np.isfinite(dd), "max_drawdown must be finite"
-        assert dd >= 0, "max_drawdown magnitude must be non-negative"
+        assert dd <= 0, "max_drawdown magnitude must be non-positive"
 
     def test_exposure_between_0_and_1(self) -> None:
         result = self._backtest_result()
