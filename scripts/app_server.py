@@ -91,15 +91,34 @@ def run_scan(req: ScanRequest):
     try:
         df_opps = agent.generate_thematic_opportunities(req.theme)
     except Exception as e:
+        # Degrade gracefully instead of a hard 500 so the terminal UI never breaks.
+        # An empty matrix (e.g. when no market data could be fetched) is returned as a
+        # valid, empty result with an explanatory note rather than an error response.
+        print(f"[scan] agent failed, returning empty matrix: {e}")
+        df_opps = pd.DataFrame()
+    finally:
         agent.discover_universe = original_discover
-        raise HTTPException(status_code=500, detail=f"Scan execution error: {e}")
-        
-    agent.discover_universe = original_discover
-    
+
+    if df_opps is None or df_opps.empty:
+        return {
+            "results": {
+                "data": [],
+                "report": (
+                    "### [SCAN RETURNED NO DATA]\n\n"
+                    "**The opportunity agent could not produce a matrix for the selected "
+                    "universe.** This usually means market data for the chosen tickers was "
+                    "unavailable (no upstream connectivity, rate limit, or unknown symbols).\n\n"
+                    "- Verify network access to the market-data providers.\n"
+                    "- Try a smaller or more liquid universe.\n"
+                    "- The terminal remains fully operational; re-run the scan when data is reachable."
+                ),
+            }
+        }
+
     # Save CSV locally
     os.makedirs("outputs", exist_ok=True)
     df_opps.to_csv("outputs/unified_opportunities.csv", index=False)
-    
+
     # Convert dataframe to JSON list
     data_list = df_opps.to_dict(orient="records")
     
