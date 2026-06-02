@@ -315,5 +315,125 @@ def get_crypto_historical(symbol: str):
     """Mocks historical crypto rates using yfinance."""
     return get_historical(symbol)
 
+# ────── OpenBB-Workspace widget routes ──────
+
+@app.get("/api/v1/equity/fundamental/management")
+def get_management(symbol: str):
+    """Management team / company officers (yfinance companyOfficers + fallback)."""
+    try:
+        info = yf.Ticker(symbol).info
+        officers = info.get("companyOfficers", []) or []
+        rows = []
+        for o in officers:
+            rows.append({
+                "name": o.get("name", "—"),
+                "title": o.get("title", "—"),
+                "compensation": o.get("totalPay"),
+                "currency": info.get("currency", "USD"),
+            })
+        if rows:
+            return {"results": rows}
+    except Exception:
+        pass
+    # deterministic fallback
+    seed = sum(ord(c) for c in symbol)
+    titles = ["Chief Executive Officer", "Chief Financial Officer", "Chief Operating Officer",
+              "SVP, Worldwide Marketing", "General Counsel", "Chief Technology Officer"]
+    rows = [{"name": f"Officer {i+1}", "title": titles[i % len(titles)],
+             "compensation": (seed * (i + 3) % 25 + 1) * 100000 if i < 4 else None,
+             "currency": "USD"} for i in range(6)]
+    return {"results": rows}
+
+@app.get("/api/v1/equity/fundamental/revenue_geographic")
+def get_revenue_geographic(symbol: str):
+    """Geographic revenue split by fiscal year (deterministic mock — yfinance lacks this)."""
+    regions = ["Americas", "Europe", "Greater China", "Japan", "Rest of Asia Pacific", "Other"]
+    seed = sum(ord(c) for c in symbol) or 1
+    rng = np.random.default_rng(seed)
+    base = 50 + (seed % 40)
+    rows = []
+    for i, fy in enumerate(range(2010, 2026)):
+        growth = (1.10 + (seed % 7) / 100.0) ** i
+        weights = rng.dirichlet(np.array([5, 3, 2.5, 1.5, 1.2, 0.8]))
+        total = base * growth
+        row = {"fiscal_year": fy}
+        for r, w in zip(regions, weights):
+            row[r] = round(total * w, 2)
+        rows.append(row)
+    return {"results": rows, "regions": regions}
+
+@app.get("/api/v1/apps")
+def get_apps():
+    """Apps Marketplace catalog (static, mirrors the OpenBB Workspace marketplace)."""
+    catalog = [
+        {"id": "adanos", "category": "SENTIMENT", "name": "Adanos Market Sentiment", "new": True,
+         "tagline": "Reddit, X, news, and Polymarket sentiment + buzz",
+         "description": "Buzz scores, trending tickers, and per-symbol sentiment from Reddit, X/Twitter, 50+ news sources, and Polymarket — all in one dashboard."},
+        {"id": "axiora", "category": "FUNDAMENTALS", "name": "Axiora — Japanese equity intelligence", "new": False,
+         "tagline": "JP equity financials, ownership, and audit trails",
+         "description": "Financials, ownership networks, and earnings signals for ~4,000 Japanese listed companies — every row traces to a source EDINET filing."},
+        {"id": "bluegamma", "category": "FIXED INCOME", "name": "BlueGamma Interest Rates", "new": False,
+         "tagline": "Forward curves and swap rates, 30+ global indices",
+         "description": "Live interest rate curves and swap rates for SOFR, SONIA, EURIBOR, CORRA, and 30+ indices. 7-day delayed data for free."},
+        {"id": "cftc", "category": "TRADING ACTIVITY", "name": "CFTC Public Reports", "new": False,
+         "tagline": "Commitment of Traders history for every contract",
+         "description": "Search and query the full historical database of reports for contracts covering commodity and financial futures."},
+        {"id": "eia", "category": "COMMODITY", "name": "EIA Energy Data", "new": False,
+         "tagline": "U.S. energy time series straight from the EIA",
+         "description": "Browse, search, and chart U.S. energy time series and tables from the Weekly Petroleum Status Report, Short-Term Energy Outlook, and more."},
+        {"id": "exponential", "category": "TRADING ACTIVITY", "name": "Exponential Flow Intelligence", "new": False,
+         "tagline": "Order-book supply and demand by investor type",
+         "description": "You see price and volume. The mechanics of who is driving flow and why liquidity is shifting remain trapped behind high-frequency noise."},
+        {"id": "findatasets", "category": "FUNDAMENTALS", "name": "Financial Datasets Market Intelligence", "new": False,
+         "tagline": "Full US equity financials + news, all in one app",
+         "description": "Tracks US equities end-to-end — company overviews with news and historical prices, full financial statements, key metrics, insider trades, earnings."},
+        {"id": "hsdl", "category": "FILINGS & RESEARCH", "name": "HSDL Document Library", "new": False,
+         "tagline": "Search the Homeland Security Digital Library",
+         "description": "Search, explore, and view the public collection of documents in the Homeland Security Digital Library."},
+        {"id": "openportfolio", "category": "PORTFOLIO & RISK", "name": "Open Portfolio", "new": False,
+         "tagline": "Portfolio risk, attribution, and factor analytics",
+         "description": "Portfolio management suite with tools for imputing positions, risk, attribution and factor analytics."},
+        {"id": "outsampler", "category": "NEWS", "name": "Outsampler Intelligence", "new": False,
+         "tagline": "Severity-scored alerts and AI watchlist briefs",
+         "description": "Severity-scored alerts, AI daily briefs, and cross-asset driver maps."},
+        {"id": "alphasearch", "category": "RESEARCH", "name": "AlphaSearch Thematic Scanner", "new": True,
+         "tagline": "Multi-factor thematic opportunity discovery + AI report",
+         "description": "Build a thematic universe and run the AlphaSearch quant agent: technicals, X sentiment, insider/patent signals, correlation pruning, and a Gemini analyst report.",
+         "connected": True},
+    ]
+    return {"results": catalog}
+
+class AskRequest(BaseModel):
+    prompt: str
+    symbol: str | None = None
+
+@app.post("/api/v1/ai/ask")
+def ai_ask(req: AskRequest):
+    """AI copilot passthrough to Gemini, with a graceful local fallback when no key is set."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    ctx = f" The user is currently viewing the symbol {req.symbol}." if req.symbol else ""
+    if not api_key:
+        return {"results": {
+            "answer": (
+                "**[Local copilot — no GEMINI_API_KEY set]**\n\n"
+                f"I can't reach Gemini without an API key, but here is how I'd approach it:{ctx}\n\n"
+                "- Add `GEMINI_API_KEY=...` to your `.env` to enable live AI synthesis.\n"
+                "- Then ask things like *\"summarize this company's risk profile\"* or "
+                "*\"compare margins vs peers\"* and I'll use the loaded widget data as context."
+            )
+        }}
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        prompt = f"You are the AlphaSearch financial copilot embedded in an OpenBB-style terminal.{ctx}\n\nUser: {req.prompt}"
+        res = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]},
+                            headers={"Content-Type": "application/json"}, timeout=60)
+        if res.status_code == 200:
+            answer = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            answer = f"[Gemini API Error {res.status_code}]"
+    except Exception as e:
+        answer = f"[Gemini connection error]: {e}"
+    return {"results": {"answer": answer}}
+
 if __name__ == "__main__":
     uvicorn.run("app_server:app", host="127.0.0.1", port=6900, reload=True)
