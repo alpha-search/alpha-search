@@ -362,46 +362,73 @@ def get_revenue_geographic(symbol: str):
         rows.append(row)
     return {"results": rows, "regions": regions}
 
+def _connector(name, category, access, desc):
+    return {"name": name, "category": category, "access": access, "description": desc, "status": "not_configured"}
+
 @app.get("/api/v1/apps")
 def get_apps():
-    """Apps Marketplace catalog (static, mirrors the OpenBB Workspace marketplace)."""
-    catalog = [
-        {"id": "adanos", "category": "SENTIMENT", "name": "Adanos Market Sentiment", "new": True,
-         "tagline": "Reddit, X, news, and Polymarket sentiment + buzz",
-         "description": "Buzz scores, trending tickers, and per-symbol sentiment from Reddit, X/Twitter, 50+ news sources, and Polymarket — all in one dashboard."},
-        {"id": "axiora", "category": "FUNDAMENTALS", "name": "Axiora — Japanese equity intelligence", "new": False,
-         "tagline": "JP equity financials, ownership, and audit trails",
-         "description": "Financials, ownership networks, and earnings signals for ~4,000 Japanese listed companies — every row traces to a source EDINET filing."},
-        {"id": "bluegamma", "category": "FIXED INCOME", "name": "BlueGamma Interest Rates", "new": False,
-         "tagline": "Forward curves and swap rates, 30+ global indices",
-         "description": "Live interest rate curves and swap rates for SOFR, SONIA, EURIBOR, CORRA, and 30+ indices. 7-day delayed data for free."},
-        {"id": "cftc", "category": "TRADING ACTIVITY", "name": "CFTC Public Reports", "new": False,
-         "tagline": "Commitment of Traders history for every contract",
-         "description": "Search and query the full historical database of reports for contracts covering commodity and financial futures."},
-        {"id": "eia", "category": "COMMODITY", "name": "EIA Energy Data", "new": False,
-         "tagline": "U.S. energy time series straight from the EIA",
-         "description": "Browse, search, and chart U.S. energy time series and tables from the Weekly Petroleum Status Report, Short-Term Energy Outlook, and more."},
-        {"id": "exponential", "category": "TRADING ACTIVITY", "name": "Exponential Flow Intelligence", "new": False,
-         "tagline": "Order-book supply and demand by investor type",
-         "description": "You see price and volume. The mechanics of who is driving flow and why liquidity is shifting remain trapped behind high-frequency noise."},
-        {"id": "findatasets", "category": "FUNDAMENTALS", "name": "Financial Datasets Market Intelligence", "new": False,
-         "tagline": "Full US equity financials + news, all in one app",
-         "description": "Tracks US equities end-to-end — company overviews with news and historical prices, full financial statements, key metrics, insider trades, earnings."},
-        {"id": "hsdl", "category": "FILINGS & RESEARCH", "name": "HSDL Document Library", "new": False,
-         "tagline": "Search the Homeland Security Digital Library",
-         "description": "Search, explore, and view the public collection of documents in the Homeland Security Digital Library."},
-        {"id": "openportfolio", "category": "PORTFOLIO & RISK", "name": "Open Portfolio", "new": False,
-         "tagline": "Portfolio risk, attribution, and factor analytics",
-         "description": "Portfolio management suite with tools for imputing positions, risk, attribution and factor analytics."},
-        {"id": "outsampler", "category": "NEWS", "name": "Outsampler Intelligence", "new": False,
-         "tagline": "Severity-scored alerts and AI watchlist briefs",
-         "description": "Severity-scored alerts, AI daily briefs, and cross-asset driver maps."},
-        {"id": "alphasearch", "category": "RESEARCH", "name": "AlphaSearch Thematic Scanner", "new": True,
-         "tagline": "Multi-factor thematic opportunity discovery + AI report",
-         "description": "Build a thematic universe and run the AlphaSearch quant agent: technicals, X sentiment, insider/patent signals, correlation pruning, and a Gemini analyst report.",
-         "connected": True},
+    """Apps Marketplace + My Apps catalog (institutional connector grid)."""
+    marketplace = [
+        _connector("ADSB-Exchange Jet Tracker", "Alternative Data", "API KEY", "Corporate private jets coordinates and flight path logs."),
+        _connector("Alpha Vantage", "Equities", "API KEY", "Standard market metrics, daily indicators, and technical charts."),
+        _connector("Baker Hughes rig counts", "Commodities", "FREE", "Oil and gas active drilling rig counts in North America."),
+        _connector("Benzinga News API", "News & Earnings", "API KEY", "Institutional real-time corporate news feeds and headlines."),
+        _connector("Binance Exchange API", "Crypto", "FREE", "Real-time exchange trading books, volumes, and candle data."),
+        _connector("Bloomberg News Feed", "News & Earnings", "API KEY", "Financial news articles and market analysis commentaries."),
+        _connector("Bloomberg Terminal API", "Equities", "API KEY", "Enterprise-grade real-time global market feeds (B-PIPE)."),
+        _connector("Bureau of Labor Statistics", "Macro", "FREE", "US employment figures, wage tables, and inflation data."),
+        _connector("CME Futures API", "Commodities", "API KEY", "Futures quotes for gold, silver, oil, agriculture and gas."),
+        _connector("Coinbase Exchange API", "Crypto", "FREE", "Institutional order books, trades history, and currency quotes."),
+        _connector("CoinGecko API", "Crypto", "FREE", "Free crypto rates, historical candles, and coin descriptors."),
+        _connector("CoinMarketCap Professional", "Crypto", "API KEY", "Global cryptocurrency market capitalization indexes and listings."),
+        _connector("DeFi Llama Portal", "Crypto", "FREE", "Free TVL metrics, protocol indexes, and yield data feeds."),
+        _connector("Earnings Whispers Data", "News & Earnings", "FREE", "Earnings calendar schedules and consensus expectations."),
+        _connector("Etherscan Developer", "Crypto", "API KEY", "Ethereum blockchain logs, address transactions, and contract logs."),
+        _connector("European Central Bank", "Forex", "FREE", "Free official daily currency exchange rates for Euro base."),
+        _connector("Eurostat Statistics API", "Macro", "FREE", "Official EU statistical indices, inflation, and growth tables."),
+        _connector("FactSet Connect", "Equities", "API KEY", "Multi-asset class research and portfolio analytics data streams."),
+        _connector("Finnhub Stock API", "Equities", "API KEY", "Real-time quote ticks, earnings calendars, and company filings."),
+        _connector("FRED Economic Data", "Macro", "FREE", "Federal Reserve economic series: rates, GDP, CPI, employment."),
+        _connector("Glassnode On-Chain", "Crypto", "API KEY", "On-chain metrics, cohort flows, and network health indicators."),
+        _connector("IEX Cloud", "Equities", "API KEY", "Real-time and historical US equity quotes and fundamentals."),
+        _connector("Intrinio", "Equities", "API KEY", "Standardized fundamentals, filings, and reference data."),
+        _connector("Kraken Exchange", "Crypto", "FREE", "Spot and derivatives order books, OHLC, and trade history."),
+        _connector("Messari", "Crypto", "API KEY", "Crypto asset profiles, metrics, and research intelligence."),
+        _connector("Nasdaq Data Link", "Macro", "API KEY", "Curated economic, alternative, and market datasets."),
+        _connector("News API", "News & Earnings", "API KEY", "Aggregated global headlines across 50+ publishers."),
+        _connector("OANDA FX", "Forex", "API KEY", "Streaming spot FX rates and historical exchange data."),
+        _connector("Polygon.io", "Equities", "API KEY", "Tick-level US equities, options, and aggregates."),
+        _connector("Pyth Network", "Crypto", "FREE", "Sub-second cross-asset price oracle feeds."),
+        _connector("Quiver Quantitative", "Alternative Data", "API KEY", "Congressional trades, lobbying, and government contract signals."),
+        _connector("Reddit WSB Sentiment", "Alternative Data", "FREE", "Trending tickers and retail sentiment from r/wallstreetbets."),
+        _connector("Tiingo", "Equities", "API KEY", "End-of-day prices, fundamentals, and curated news."),
+        _connector("Trading Economics", "Macro", "API KEY", "20M+ economic indicators across 196 countries."),
+        _connector("Twelve Data", "Equities", "API KEY", "Real-time and historical stocks, forex, and crypto."),
+        _connector("USDA Commodities", "Commodities", "FREE", "Agricultural production, supply, and price estimates."),
+        _connector("World Bank Open Data", "Macro", "FREE", "Global development and macroeconomic indicators."),
+        _connector("X / Twitter API", "Alternative Data", "API KEY", "Per-symbol social buzz, sentiment, and trend velocity."),
+        _connector("OpenWeather", "Alternative Data", "FREE", "Weather data for commodity and energy demand modeling."),
+        _connector("Quandl Core", "Macro", "API KEY", "Historical economic, financial, and alternative time series."),
     ]
-    return {"results": catalog}
+    # mark a couple of marketplace connectors as already connected
+    for c in marketplace:
+        if c["name"] in ("Financial Modeling Prep",):
+            c["status"] = "connected"
+    my_apps = [
+        {"name": "Thematic Opportunity Scanner", "kind": "workspace", "status": "connected",
+         "description": "Deploy rule-based thematic factor scans and synthesis via Gemini model keys."},
+        {"name": "Options Chains Monitor (OMON)", "kind": "workspace", "status": "connected",
+         "description": "Real-time options calls and puts grid lists for active cohort stocks."},
+        {"name": "Financial Modeling Prep", "kind": "connector", "status": "configured",
+         "description": "Fundamental metrics, ratios, and historical profile feeds."},
+        {"name": "Yahoo Finance (YF)", "kind": "connector", "status": "configured",
+         "description": "Free market quotes, daily candle charts, and news headlines."},
+        {"name": "Tavily AI Search", "kind": "connector", "status": "configured",
+         "description": "AI-optimized search summaries of web news feeds."},
+        {"name": "SEC EDGAR Portal", "kind": "connector", "status": "configured",
+         "description": "Automated access to company filings (10-K, 10-Q, 8-K) from SEC."},
+    ]
+    return {"results": {"marketplace": marketplace, "my_apps": my_apps}}
 
 class AskRequest(BaseModel):
     prompt: str

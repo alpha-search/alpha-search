@@ -3,25 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AlphaSearch Workspace</title>
+  <title>AlphaSearch Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
-       OPENBB-WORKSPACE THEME (neutral institutional dark)
+       ALPHASEARCH — INSTITUTIONAL THEME
+       near-black canvas · indigo #6E7BF2 · emerald · Space Grotesk
        ============================================================ */
     :root{
-      --bg:#0a0a0c; --sidebar:#0d0d10; --header:#0d0d10;
-      --panel:#151518; --panel-2:#1b1b1f; --panel-3:#202025;
-      --border:#26262c; --border-soft:#1e1e23;
-      --text:#e7e7ea; --muted:#8b8b93; --muted-2:#5e5e66;
-      --blue:#2f81f7; --blue-bright:#4c97ff; --blue-soft:rgba(47,129,247,0.14);
-      --green:#2ec27e; --green-dim:#1c7f54; --red:#f0483e; --red-dim:#9b2c27;
-      --teal:#3fb6a8; --gold:#d4af37;
+      --bg:#060608; --sidebar:#08080b; --header:#08080b;
+      --panel:#0e0e12; --panel-2:#15151b; --panel-3:#1c1c23;
+      --border:#212129; --border-soft:#17171d;
+      --text:#e9e9ee; --muted:#8a8a96; --muted-2:#54545e;
+      --blue:#6E7BF2; --blue-bright:#8b95f7; --blue-soft:rgba(110,123,242,0.13);
+      --green:#34d399; --green-dim:#1c7f54; --red:#f0594e; --red-dim:#9b2c27;
+      --teal:#34d399; --gold:#c9a24a;
       --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono',monospace;
+      --display:'Space Grotesk','Inter',system-ui,sans-serif;
+      --mono:'JetBrains Mono','SFMono-Regular',ui-monospace,monospace;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;height:100vh;overflow:hidden;
-      font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+      font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;letter-spacing:.005em}
+    .sb-logo .lt,.apps-head h1,.ac-name,.ti-price,.simple h1,.cp-head .t,.dash-tab{font-family:var(--display)}
     .num{font-variant-numeric:tabular-nums}
     .up{color:var(--green)} .down{color:var(--red)} .muted{color:var(--muted)}
     a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
@@ -82,33 +88,52 @@
     .page.active{display:block}
 
     /* Apps page */
-    .apps-head{padding:26px 30px 0}
+    .apps-head{padding:18px 26px 0}
     .apps-head h1{font-size:24px;font-weight:700}
     .apps-sub{color:var(--muted);margin-top:6px;font-size:13px}
-    .apps-tabs{display:flex;gap:22px;margin-top:18px;border-bottom:1px solid var(--border)}
-    .apps-tab{padding:10px 2px;color:var(--muted);cursor:pointer;font-size:14px;border-bottom:2px solid transparent;display:flex;align-items:center;gap:8px}
-    .apps-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
-    .beta{font-size:10px;background:var(--blue-soft);color:var(--blue);padding:2px 7px;border-radius:10px}
-    .apps-controls{display:flex;align-items:center;gap:12px;padding:18px 30px}
-    .ctl{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--muted);font-size:13px}
-    .ctl input{background:none;border:none;color:var(--text);font-family:inherit;font-size:13px;min-width:240px}
+    .apps-tabs{display:flex;gap:26px;border-bottom:1px solid var(--border)}
+    .apps-tab{padding:14px 2px;color:var(--muted);cursor:pointer;font-size:14px;border-bottom:2px solid transparent;display:flex;align-items:center;gap:8px}
+    .apps-tab:hover{color:var(--text)}
+    .apps-tab.active{color:var(--text);border-bottom-color:var(--blue)}
+    .apps-controls{display:flex;align-items:center;gap:12px;padding:18px 26px 6px}
+    .ctl{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:9px 13px;color:var(--muted);font-size:13px}
+    .ctl input{background:none;border:none;color:var(--text);font-family:inherit;font-size:13px;min-width:260px}
     .ctl input:focus{outline:none}
-    .ctl.sel{cursor:pointer}
-    .apps-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:6px 30px 40px}
-    .app-card{border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:12px;min-height:210px}
-    .app-card:hover{border-color:#34343c}
-    .ac-top{display:flex;gap:14px;align-items:flex-start}
-    .ac-icon{width:40px;height:40px;border-radius:9px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--border)}
-    .ac-icon svg{width:22px;height:22px;color:var(--blue)}
-    .ac-cat{color:var(--muted-2);font-size:11px;font-weight:600;letter-spacing:.07em}
-    .ac-name{font-size:16px;font-weight:700;margin-top:2px}
-    .ac-new{margin-left:auto;font-size:11px;color:var(--teal);border:1px solid var(--teal);border-radius:11px;padding:2px 9px;flex-shrink:0}
-    .ac-tag{font-size:14px;font-weight:600}
-    .ac-desc{color:var(--muted);font-size:12.5px;line-height:1.5;flex:1;border-top:1px solid var(--border-soft);padding-top:12px}
-    .ac-btn{align-self:flex-start;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
-      padding:8px 16px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px}
-    .ac-btn:hover{background:var(--panel-3);border-color:#3a3a42}
-    .ac-btn.connected{color:var(--green);border-color:var(--green-dim)}
+    .sortby{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--muted-2);font-size:11px;letter-spacing:.08em}
+    .sortby select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px}
+    .pills{display:flex;flex-wrap:wrap;gap:8px;padding:8px 26px 14px}
+    .pill-f{padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--muted);cursor:pointer;font-size:12.5px}
+    .pill-f:hover{color:var(--text)}
+    .pill-f.active{background:var(--blue-soft);border-color:var(--blue);color:var(--blue-bright)}
+    .apps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:6px 26px 40px}
+    @media(max-width:1500px){.apps-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:1100px){.apps-grid{grid-template-columns:repeat(2,1fr)}}
+    .app-card{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel);display:flex;flex-direction:column;gap:10px;transition:border-color .12s}
+    .app-card:hover{border-color:#33333d}
+    .app-card.focus{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold-soft)}
+    .ac-top{display:flex;align-items:center;justify-content:space-between}
+    .ac-cat{color:var(--muted-2);font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase}
+    .ac-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:5px}
+    .ac-badge.key{color:var(--gold);background:rgba(201,162,74,.12)}
+    .ac-badge.free{color:var(--green);background:rgba(52,211,153,.12)}
+    .ac-name{font-size:15px;font-weight:700}
+    .ac-desc{color:var(--muted);font-size:12px;line-height:1.5;flex:1;min-height:34px}
+    .ac-status{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--muted);border-top:1px solid var(--border-soft);padding-top:10px}
+    .ac-status .st{display:flex;align-items:center;gap:6px}
+    .ac-status .st .d{width:7px;height:7px;border-radius:50%;background:var(--muted-2)}
+    .ac-status .st.ok .d{background:var(--green);box-shadow:0 0 5px var(--green)}
+    .ac-btn{width:100%;background:var(--blue);border:none;color:#fff;padding:9px 0;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600}
+    .ac-btn:hover{background:var(--blue-bright)}
+    .ac-btn.ghost{background:var(--panel-2);border:1px solid var(--border);color:var(--text)}
+    .ac-btn.ghost:hover{background:var(--panel-3)}
+    .ac-btnrow{display:flex;gap:8px}
+    .ac-btnrow .ac-btn{flex:1}
+    .my-card{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel);display:flex;flex-direction:column;gap:10px}
+    .my-card .h{display:flex;align-items:center;justify-content:space-between}
+    .my-card .h .nm{font-weight:700;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+    .my-card .h .nm.accent{color:var(--gold)}
+    .gold-soft{}
+    :root{--gold-soft:rgba(201,162,74,.18)}
 
     /* Dashboard page */
     .dash-bar{display:flex;align-items:center;gap:4px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--header)}
@@ -185,6 +210,9 @@
     .cp-send{background:var(--blue);border:none;color:#fff;border-radius:8px;padding:0 14px;cursor:pointer;font-weight:600}
     .cp-toggle{position:absolute;right:0;top:50%;transform:translateY(-50%);background:var(--blue);color:#fff;border:none;
       width:22px;height:46px;border-radius:8px 0 0 8px;cursor:pointer;z-index:20;display:flex;align-items:center;justify-content:center}
+    .cp-chip{border:1px solid var(--border);background:var(--panel);border-radius:9px;padding:9px 12px;font-size:12.5px;color:var(--text);cursor:pointer}
+    .cp-chip:hover{border-color:var(--blue);background:var(--blue-soft)}
+    .sb-foot .talk{background:var(--panel)} .sb-foot .talk b{color:#fff;background:var(--blue)}
 
     /* svg chart */
     .chart svg{width:100%;height:100%;display:block}
@@ -239,8 +267,11 @@
         <div class="sb-sec"><span>Shared with me</span></div>
       </nav>
       <div class="sb-foot">
-        <div class="talk"><span>Need more?</span><b>Let's talk</b></div>
-        <div class="ver">v5.0.0</div>
+        <div class="talk"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);margin-right:7px"></span>Connected</span><b>Let's talk</b></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <select style="background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 8px;font-family:inherit;font-size:11px"><option>Slate</option><option>Midnight</option><option>Carbon</option></select>
+          <span class="ver" style="margin:0">v1.0.0</span>
+        </div>
       </div>
     </aside>
 
@@ -250,22 +281,17 @@
       <!-- APPS PAGE -->
       <div class="page active" id="page-apps">
         <div class="apps-head">
-          <h1>Apps</h1>
-          <div class="apps-sub">Manage your Apps in the <a href="#" onclick="go('connections');return false">Connections page</a>.</div>
           <div class="apps-tabs">
             <div class="apps-tab" id="atab-my" onclick="setAppsTab('my')">My Apps</div>
-            <div class="apps-tab active" id="atab-market" onclick="setAppsTab('market')">Apps Marketplace <span class="beta">Beta</span></div>
+            <div class="apps-tab active" id="atab-market" onclick="setAppsTab('market')">Apps Marketplace</div>
           </div>
         </div>
         <div class="apps-controls">
           <div class="ctl"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="appSearch" placeholder="Search apps" oninput="renderApps()"></div>
-          <div class="ctl sel">Category <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
-          <div class="ctl sel">Sort by <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
-          <button class="icon-btn" style="margin-left:auto;border:1px solid var(--border);border-radius:8px;padding:8px" onclick="loadApps(true)" title="Refresh">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          </button>
+            <input id="appSearch" placeholder="Search connectors…" oninput="renderApps()"></div>
+          <div class="sortby">SORT BY: <select id="appSort" onchange="renderApps()"><option value="az">Name (A-Z)</option><option value="za">Name (Z-A)</option><option value="cat">Category</option></select></div>
         </div>
+        <div class="pills" id="catPills"></div>
         <div class="apps-grid" id="appsGrid"></div>
       </div>
 
@@ -306,11 +332,16 @@
     <aside class="copilot" id="copilot">
       <button class="cp-toggle" onclick="toggleCopilot()" id="cpToggle">‹</button>
       <div class="cp-head">
-        <div class="t">✦ Ask AlphaSearch</div>
+        <div class="t">AlphaSearch Copilot</div>
         <button class="icon-btn" onclick="clearChat()" title="New chat"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
       </div>
       <div class="cp-body" id="cpBody">
-        <div class="msg ai">Hi — I'm your copilot. I can see the symbol on your active dashboard. Ask me to summarize a company, compare metrics, or explain a chart.</div>
+        <div class="msg ai"><b class="b">AI Prompt Template</b><br>I can see the symbol on your active dashboard. Ask me to summarize a company, compare metrics, or explain a chart — or start with one of these:</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="cp-chip" onclick="chip('Run thematic opportunity scan')">Run thematic opportunity scan</div>
+          <div class="cp-chip" onclick="chip('Explain the Divergence Index math')">Explain Divergence Index math</div>
+          <div class="cp-chip" onclick="chip('Search option volatility setups')">Search option volatility setups</div>
+        </div>
       </div>
       <div class="cp-in">
         <textarea id="cpInput" placeholder="Ask about AAPL…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
@@ -419,16 +450,14 @@
   /* ============================================================ STATE */
   const ICONS={apps:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>'};
   const DASHBOARDS={
-    'Overview':[ {type:'ticker_info',w:4,h:200},{type:'price_perf',w:8,h:440},{type:'ticker_profile',w:8,h:320},{type:'key_metrics',w:4,h:320},{type:'revenue_geo',w:8,h:340},{type:'share_stats',w:4,h:340},{type:'management',w:12,h:260} ],
-    'Financials':[ {type:'key_metrics',w:4,h:320},{type:'fundamentals',w:8,h:320},{type:'revenue_geo',w:12,h:360} ],
-    'Technical Analysis':[ {type:'price_perf',w:8,h:480},{type:'signals',w:4,h:480} ],
-    'Comparison Analysis':[ {type:'contrast',w:12,h:420} ],
-    'Ownership':[ {type:'share_stats',w:4,h:300},{type:'management',w:8,h:300} ],
-    'Company Calendar':[ {type:'news',w:12,h:520} ],
-    'Estimates':[ {type:'key_metrics',w:4,h:320},{type:'fundamentals',w:8,h:320} ]
+    'AlphaIntelligence Dashboard':[ {type:'ticker_info',w:4,h:200},{type:'price_perf',w:8,h:440},{type:'ticker_profile',w:8,h:320},{type:'key_metrics',w:4,h:320},{type:'revenue_geo',w:8,h:340},{type:'share_stats',w:4,h:340},{type:'management',w:12,h:260} ],
+    'Filing Contrast Matrix':[ {type:'contrast',w:7,h:420},{type:'fundamentals',w:5,h:420},{type:'revenue_geo',w:12,h:340} ],
+    'Chronos Technical Canvas':[ {type:'price_perf',w:8,h:520},{type:'signals',w:4,h:520},{type:'ticker_info',w:12,h:180} ],
+    'Asset Signature Interface (ASI)':[ {type:'ticker_info',w:4,h:200},{type:'key_metrics',w:4,h:200},{type:'share_stats',w:4,h:200},{type:'price_perf',w:8,h:420},{type:'ticker_profile',w:4,h:420},{type:'news',w:6,h:300},{type:'management',w:6,h:300} ],
+    'OpenBB Sandbox':[ {type:'ticker_info',w:4,h:200},{type:'price_perf',w:8,h:440},{type:'news',w:6,h:360},{type:'fundamentals',w:6,h:360} ]
   };
   const WTITLES={ticker_info:'Ticker Information',price_perf:'Price Performance',ticker_profile:'Ticker Profile',revenue_geo:'Revenue Per Geography',key_metrics:'Key Metrics',share_stats:'Share Statistics',management:'Management Team',news:'News',signals:'Technical Signals',fundamentals:'Financial Statement Metrics',contrast:'Comparison'};
-  const state={page:'apps',appsTab:'market',dash:'Overview',symbol:'AAPL',apps:[],widgets:[],tf:{}};
+  const state={page:'apps',appsTab:'market',cat:'All',dash:'AlphaIntelligence Dashboard',symbol:'AAPL',market:[],myapps:[],widgets:[],tf:{}};
   const cache={}; // per-symbol fetched payloads
 
   /* ============================================================ NAV */
@@ -449,27 +478,39 @@
   }
   function toggleSidebar(){document.getElementById('sidebar').classList.toggle('collapsed')}
   function globalSearch(v){v=(v||'').trim().toUpperCase();if(!v)return;state.symbol=v;
-    if(state.page!=='dashboard')openDash('Overview');
+    if(state.page!=='dashboard')openDash('AlphaIntelligence Dashboard');
     state.widgets.forEach(w=>w.symbol=v);renderGrid();document.getElementById('cpInput').placeholder='Ask about '+v+'…'}
 
   /* ============================================================ APPS */
+  const CATS=['All','Equities','Crypto','Forex','Commodities','Alternative Data','Macro','News & Earnings'];
   function loadApps(force){if(force)cache._apps=null;
-    (cache._apps?Promise.resolve(cache._apps):api('/api/v1/apps').then(b=>cache._apps=b.results||[])).then(a=>{state.apps=a;renderApps()})}
-  function setAppsTab(t){state.appsTab=t;document.getElementById('atab-my').classList.toggle('active',t==='my');document.getElementById('atab-market').classList.toggle('active',t==='market');renderApps()}
+    (cache._apps?Promise.resolve(cache._apps):api('/api/v1/apps').then(b=>cache._apps=b.results||{})).then(a=>{state.market=a.marketplace||[];state.myapps=a.my_apps||[];renderCatPills();renderApps()})}
+  function renderCatPills(){document.getElementById('catPills').innerHTML=CATS.map(c=>`<div class="pill-f ${(state.cat||'All')===c?'active':''}" onclick="setCat(this.dataset.c)" data-c="${c}">${c}</div>`).join('')}
+  function setCat(c){state.cat=c;renderCatPills();renderApps()}
+  function setAppsTab(t){state.appsTab=t;document.getElementById('atab-my').classList.toggle('active',t==='my');document.getElementById('atab-market').classList.toggle('active',t==='market');
+    document.getElementById('catPills').style.display=t==='market'?'flex':'none';
+    document.getElementById('appSearch').value='';renderApps()}
   function renderApps(){const g=document.getElementById('appsGrid');const q=(document.getElementById('appSearch').value||'').toLowerCase();
-    let list=state.apps;if(state.appsTab==='my')list=list.filter(a=>a.connected);
-    list=list.filter(a=>a.name.toLowerCase().includes(q)||a.category.toLowerCase().includes(q)||(a.tagline||'').toLowerCase().includes(q));
-    if(!list.length){g.innerHTML='<div class="empty" style="grid-column:1/-1">No apps match.</div>';return}
-    g.innerHTML=list.map(a=>`<div class="app-card">
-      <div class="ac-top">
-        <div class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-        <div style="flex:1;min-width:0"><div class="ac-cat">${a.category}</div><div class="ac-name">${a.name}</div></div>
-        ${a.new?'<span class="ac-new">New</span>':''}
-      </div>
-      <div class="ac-tag">${a.tagline||''}</div>
-      <div class="ac-desc">${a.description||''}</div>
-      <button class="ac-btn ${a.connected?'connected':''}" onclick="${a.connected?`openDash('Overview')`:`alert('Connect ${a.name} — configure its credentials on the Connections page.')`}">${a.connected?'✓ Open App':'Connect App'}</button>
-    </div>`).join('')}
+    if(state.appsTab==='my'){document.getElementById('appSearch').placeholder='Search my apps…';
+      const list=(state.myapps||[]).filter(a=>a.name.toLowerCase().includes(q)||(a.description||'').toLowerCase().includes(q));
+      g.innerHTML=list.length?list.map(a=>{const btns=a.kind==='workspace'
+          ?`<button class="ac-btn" onclick="openDash('AlphaIntelligence Dashboard')">Open Dashboard Workspace</button>`
+          :`<div class="ac-btnrow"><button class="ac-btn ghost" onclick="go('connections')">Configure</button><button class="ac-btn" onclick="alert('Testing ${a.name} connection…')">Test</button></div>`;
+        return `<div class="my-card"><div class="h"><span class="nm ${a.kind==='workspace'?'accent':''}">${a.name}</span><span style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green)"></span></div>
+          <div class="ac-desc">${a.description}</div>${btns}</div>`}).join(''):'<div class="empty" style="grid-column:1/-1">No apps installed.</div>';
+      return}
+    document.getElementById('appSearch').placeholder=`Search ${(state.market||[]).length} connectors…`;
+    let list=(state.market||[]).filter(a=>(!state.cat||state.cat==='All'||a.category===state.cat))
+      .filter(a=>a.name.toLowerCase().includes(q)||a.category.toLowerCase().includes(q)||(a.description||'').toLowerCase().includes(q));
+    const sort=document.getElementById('appSort').value;
+    if(sort==='za')list.sort((x,y)=>y.name.localeCompare(x.name));
+    else if(sort==='cat')list.sort((x,y)=>x.category.localeCompare(y.category)||x.name.localeCompare(y.name));
+    else list.sort((x,y)=>x.name.localeCompare(y.name));
+    g.innerHTML=list.length?list.map(a=>{const conn=a.status==='connected';
+      return `<div class="app-card"><div class="ac-top"><span class="ac-cat">${a.category}</span><span class="ac-badge ${a.access==='FREE'?'free':'key'}">${a.access}</span></div>
+        <div class="ac-name">${a.name}</div><div class="ac-desc">${a.description}</div>
+        <div class="ac-status"><span>Status:</span><span class="st ${conn?'ok':''}"><span class="d"></span>${conn?'Connected ✓':'Not Configured'}</span></div>
+        ${conn?`<button class="ac-btn ghost" onclick="go('connections')">Configure</button>`:`<button class="ac-btn" onclick="go('connections')">Connect</button>`}</div>`}).join(''):'<div class="empty" style="grid-column:1/-1">No connectors match.</div>'}
 
   function renderConnections(){const providers=[['Alpha Vantage',true],['Tavily Search',true],['X (Twitter) API',true],['Gemini LLM',true],['yfinance (market data)',true]];
     document.getElementById('connList').innerHTML=providers.map(([n,ok])=>`<div class="conn-row"><div><span class="dot ${ok?'':'off'}"></span>${n}</div><span class="muted">${ok?'Connected':'Offline'}</span></div>`).join('')}
@@ -609,6 +650,7 @@
   function toggleCopilot(){const c=document.getElementById('copilot');c.classList.toggle('collapsed');
     document.getElementById('cpToggle').textContent=c.classList.contains('collapsed')?'‹':'›'}
   function clearChat(){document.getElementById('cpBody').innerHTML='<div class="msg ai">New chat. Ask me about '+state.symbol+'.</div>'}
+  function chip(text){document.getElementById('cpInput').value=text;sendChat()}
   function addMsg(text,cls){const b=document.getElementById('cpBody');const d=document.createElement('div');d.className='msg '+cls;
     d.innerHTML=text.replace(/\*\*(.*?)\*\*/g,'<b class="b">$1</b>').replace(/\n/g,'<br>');b.appendChild(d);b.scrollTop=b.scrollHeight;return d}
   function sendChat(){const inp=document.getElementById('cpInput');const q=inp.value.trim();if(!q)return;inp.value='';
