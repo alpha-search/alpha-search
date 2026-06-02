@@ -120,3 +120,6 @@ desktop.ini
 models/
 checkpoints/
 reports/demo/*.sqlite*
+
+# Local scratch / extracted reference frames (not a deliverable)
+scratch/
