@@ -1,0 +1,191 @@
+// AlphaPulse core relational schema.
+//
+// This Prisma schema is the canonical reference for the relational model and
+// mirrors the SQLAlchemy ORM in `app/db/models.py`. The financial time-series
+// data is NOT modelled here — it lives in a TimescaleDB hypertable defined in
+// `sql/timescale.sql`, because Prisma does not manage hypertables.
+//
+// Generate the client / run migrations with:
+//   prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-py"
+  interface = "asyncio"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [timescaledb]
+}
+
+enum UserRole {
+  reader
+  contributor
+  admin
+}
+
+enum SubscriptionTier {
+  free
+  premium
+  pro
+}
+
+enum SubscriptionStatus {
+  active
+  trialing
+  past_due
+  canceled
+  incomplete
+}
+
+enum ArticleAccess {
+  public
+  premium
+  pro
+}
+
+enum ArticleStatus {
+  draft
+  published
+  archived
+}
+
+enum AlertCondition {
+  above
+  below
+  pct_change
+}
+
+model User {
+  id             String         @id @default(uuid()) @db.Uuid
+  email          String         @unique
+  hashedPassword String         @map("hashed_password")
+  displayName    String         @map("display_name")
+  role           UserRole       @default(reader)
+  isActive       Boolean        @default(true) @map("is_active")
+  avatarUrl      String?        @map("avatar_url")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  subscription   Subscription?
+  articles       Article[]
+  watchlists     Watchlist[]
+  alerts         PriceAlert[]
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid()) @db.Uuid
+  userId               String             @unique @map("user_id") @db.Uuid
+  tier                 SubscriptionTier   @default(free)
+  status               SubscriptionStatus @default(active)
+  stripeCustomerId     String?            @map("stripe_customer_id")
+  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@map("subscriptions")
+}
+
+model Ticker {
+  id          String          @id @default(uuid()) @db.Uuid
+  symbol      String          @unique
+  companyName String          @map("company_name")
+  exchange    String?
+  sector      String?
+  industry    String?
+  logoUrl     String?         @map("logo_url")
+  description String?
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  articleLinks ArticleTicker[]
+
+  @@map("tickers")
+}
+
+model Article {
+  id           String          @id @default(uuid()) @db.Uuid
+  slug         String          @unique
+  title        String
+  summary      String
+  bodyMarkdown String          @map("body_markdown")
+  freePreview  String          @default("") @map("free_preview")
+  disclosure   String
+  coverImageUrl String?        @map("cover_image_url")
+  accessLevel  ArticleAccess   @default(public) @map("access_level")
+  status       ArticleStatus   @default(draft)
+  authorId     String          @map("author_id") @db.Uuid
+  tags         String[]
+  viewCount    Int             @default(0) @map("view_count")
+  publishedAt  DateTime?       @map("published_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  author       User            @relation(fields: [authorId], references: [id])
+  tickerLinks  ArticleTicker[]
+
+  @@index([status, publishedAt])
+  @@map("articles")
+}
+
+model ArticleTicker {
+  articleId String  @map("article_id") @db.Uuid
+  tickerId  String  @map("ticker_id") @db.Uuid
+  sentiment String?
+
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  ticker    Ticker  @relation(fields: [tickerId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tickerId])
+  @@map("article_tickers")
+}
+
+model Watchlist {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  name      String          @default("My Watchlist")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WatchlistItem[]
+
+  @@map("watchlists")
+}
+
+model WatchlistItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  watchlistId String    @map("watchlist_id") @db.Uuid
+  symbol      String
+  addedAt     DateTime  @default(now()) @map("added_at")
+
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+
+  @@unique([watchlistId, symbol])
+  @@map("watchlist_items")
+}
+
+model PriceAlert {
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  symbol          String
+  condition       AlertCondition
+  threshold       Decimal        @db.Decimal(18, 4)
+  isActive        Boolean        @default(true) @map("is_active")
+  lastTriggeredAt DateTime?      @map("last_triggered_at")
+  notifyPayload   Json?          @map("notify_payload")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([symbol])
+  @@index([isActive])
+  @@map("price_alerts")
+}

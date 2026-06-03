@@ -1,0 +1,15 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+email-validator==2.2.0
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+redis==5.2.1
+orjson==3.10.13
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+httpx==0.28.1
+stripe==11.4.1
+python-slugify==8.0.4
