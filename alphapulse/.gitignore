@@ -11,6 +11,9 @@ node_modules/
 out/
 npm-debug.log*
 
+# Local no-Docker runtime state (Postgres data, Redis, logs, PIDs)
+.localdb/
+
 # Env
 .env
 .env.local

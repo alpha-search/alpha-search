@@ -82,7 +82,13 @@ alphapulse/
 
 ---
 
-## Quick start (Docker)
+## Quick start
+
+**No Docker installed?** See **[RUN.md](./RUN.md)** for a one-command,
+conda-based local runner (`./scripts/run_local.sh`) that needs no Docker, no
+Homebrew, and no GUI.
+
+### With Docker
 
 ```bash
 cd alphapulse

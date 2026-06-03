@@ -6,9 +6,10 @@ so a misconfigured deployment fails fast instead of erroring at request time.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -57,7 +58,10 @@ class Settings(BaseSettings):
     CACHE_TTL_CHART: int = Field(default=300)
 
     # --- CORS -----------------------------------------------------------
-    CORS_ORIGINS: list[str] = Field(default=["http://localhost:3000"])
+    # NoDecode stops pydantic-settings from JSON-parsing the env value, so a
+    # plain comma-separated string (CORS_ORIGINS=http://a.com,http://b.com)
+    # is accepted and split by the validator below.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(default=["http://localhost:3000"])
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
