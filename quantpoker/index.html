@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuantPoker — The Trading Intuition Simulator</title>
+
+<!-- ============ PINNED CDN DEPENDENCIES (no build step, no NPM at runtime) ============ -->
+<!-- Tailwind CSS Play CDN, pinned to 3.4.16 -->
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<!-- Chart.js pinned to 4.4.1 (UMD build) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<!-- Lucide icons pinned to 0.462.0 (UMD build) -->
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+
+<style>
+/* ==================== DESIGN TOKENS (dark-only trading terminal) ====================
+   Two-series chart palette (#3987e5 blue / #199e70 aqua) validated for the dark
+   surface #131722: lightness band, chroma floor, CVD ΔE 69.8, contrast >= 3:1.   */
+:root{
+  --page:#0d0d0d;
+  --surface:#131722;        /* card / chart surface */
+  --surface-2:#0f131c;      /* inset wells */
+  --ink:#f2f3f5;            /* primary text */
+  --ink-2:#c3c2b7;          /* secondary text */
+  --muted:#898781;          /* axis / labels */
+  --grid:#2c2c2a;           /* hairline gridlines */
+  --border:rgba(255,255,255,.09);
+  --s1:#3987e5;             /* series 1: Theoretical EV */
+  --s2:#199e70;             /* series 2: Realized PnL  */
+  --good:#0ca30c;           /* status: good  (reserved, never a series) */
+  --warn:#fab219;           /* status: warning */
+  --crit:#d03b3b;           /* status: critical */
+}
+html,body{background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;}
+.num{font-variant-numeric:tabular-nums;}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;}
+.well{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;}
+.hairline{border-color:var(--border);}
+.label-cap{font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2c2c2a;border-radius:4px}
+
+/* ==================== PLAYING CARDS ==================== */
+.pcard{
+  width:58px;height:82px;border-radius:7px;background:#f4f4ef;color:#15181d;
+  display:flex;flex-direction:column;justify-content:space-between;padding:5px 6px;
+  box-shadow:0 2px 6px rgba(0,0,0,.5);position:relative;flex:0 0 auto;user-select:none;
+}
+.pcard .rank{font-size:1.15rem;font-weight:700;line-height:1}
+.pcard .suit{font-size:1.3rem;line-height:1;align-self:flex-end}
+.pcard.red{color:#b3262a}
+.pcard.back{
+  background:repeating-linear-gradient(45deg,#1b2a4a 0 6px,#16223c 6px 12px);
+  border:2px solid #2c3e63;
+}
+.pcard.slot{
+  background:transparent;border:1.5px dashed #33383f;box-shadow:none;
+}
+.pcard.winner{outline:2px solid var(--good);outline-offset:2px}
+
+/* ==================== ACTION BUTTONS ==================== */
+.abtn{
+  border:1px solid var(--border);border-radius:8px;padding:.55rem .5rem;
+  font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  background:var(--surface-2);color:var(--ink-2);transition:all .12s;
+}
+.abtn:hover:not(:disabled){border-color:#4a5568;color:var(--ink);transform:translateY(-1px)}
+.abtn:disabled{opacity:.35;cursor:not-allowed}
+.abtn-fold:hover:not(:disabled){border-color:var(--crit);color:var(--crit)}
+.abtn-call{border-color:rgba(57,135,229,.45)}
+.abtn-call:hover:not(:disabled){border-color:var(--s1);color:#8db9ee}
+.abtn-deal{background:rgba(57,135,229,.14);border-color:var(--s1);color:#9cc3f0}
+.abtn-allin:hover:not(:disabled){border-color:var(--warn);color:var(--warn)}
+
+/* ==================== LOG ==================== */
+#log{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;line-height:1.5}
+#log .sys{color:var(--muted)}
+#log .bot{color:#d8a657}
+#log .you{color:#8db9ee}
+#log .win{color:var(--good);font-weight:700}
+#log .lose{color:var(--crit);font-weight:700}
+
+/* ==================== OVERLAYS ==================== */
+#freezeOverlay{
+  position:fixed;inset:0;z-index:70;background:rgba(8,3,3,.92);backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;
+}
+#freezeOverlay.on{display:flex}
+@keyframes pulseRed{0%,100%{box-shadow:0 0 0 0 rgba(208,59,59,.5)}50%{box-shadow:0 0 0 22px rgba(208,59,59,0)}}
+#freezeBox{animation:pulseRed 1.6s infinite}
+#revengeBanner{
+  position:fixed;top:0;left:0;right:0;z-index:60;display:none;
+  background:var(--crit);color:#fff;text-align:center;font-weight:800;
+  letter-spacing:.14em;padding:.65rem;font-size:.82rem;
+}
+#revengeBanner.on{display:block;animation:flashB .28s 6 alternate}
+@keyframes flashB{from{background:var(--crit)}to{background:#7c1d1d}}
+#gameOverOverlay{position:fixed;inset:0;z-index:80;background:rgba(5,5,8,.94);display:none;align-items:center;justify-content:center}
+#gameOverOverlay.on{display:flex}
+
+/* status pills */
+.pill{font-size:.62rem;font-weight:700;letter-spacing:.1em;border-radius:999px;padding:.18rem .6rem;border:1px solid}
+.pill-live{color:var(--good);border-color:rgba(12,163,12,.5);background:rgba(12,163,12,.08)}
+.pill-wait{color:var(--muted);border-color:var(--border)}
+.pill-turn{color:var(--warn);border-color:rgba(250,178,25,.5);background:rgba(250,178,25,.08)}
+
+.blink{animation:blink 1.1s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ==================== REVENGE-TRADE ALERT BANNER ==================== -->
+<div id="revengeBanner">⚠ EMOTIONAL OVERRIDE DETECTED — STICK TO THE SYSTEM ⚠</div>
+
+<!-- ==================== HEADER / TICKER BAR ==================== -->
+<header class="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 border-b hairline bg-[#0f131c]">
+  <div class="flex items-center gap-2">
+    <i data-lucide="candlestick-chart" class="w-5 h-5 text-[#3987e5]"></i>
+    <h1 class="text-sm font-extrabold tracking-widest">QUANTPOKER <span class="text-[#898781] font-medium">· TRADING INTUITION SIMULATOR</span></h1>
+  </div>
+  <div class="flex items-center gap-5 ml-auto text-xs num">
+    <div><span class="label-cap mr-1.5">Capital</span><span id="tickCapital" class="font-bold">$10,000</span></div>
+    <div><span class="label-cap mr-1.5">Session PnL</span><span id="tickPnl" class="font-bold">$0</span></div>
+    <div><span class="label-cap mr-1.5">Drawdown</span><span id="tickDd" class="font-bold">0.0%</span></div>
+    <div><span class="label-cap mr-1.5">Hand</span><span id="tickHand" class="font-bold">—</span></div>
+    <span id="statusPill" class="pill pill-wait">IDLE</span>
+  </div>
+</header>
+
+<!-- ==================== MAIN GRID : 40% table / 60% analytics ==================== -->
+<main class="grid grid-cols-1 xl:grid-cols-5 gap-3 p-3">
+
+  <!-- ~~~~~~~~~~~~~~~~ LEFT: LIVE TABLE (40%) ~~~~~~~~~~~~~~~~ -->
+  <section class="xl:col-span-2 flex flex-col gap-3">
+
+    <!-- Counterparty -->
+    <div class="panel p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <i data-lucide="bot" class="w-4 h-4 text-[#d8a657]"></i>
+          <span class="label-cap">Counterparty</span>
+          <span id="botNameEl" class="text-xs font-bold text-[#d8a657]">BULL MARKET BOT</span>
+        </div>
+        <div class="text-xs num"><span class="label-cap mr-1">Stack</span><span id="botStackEl" class="font-bold">$10,000</span></div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div id="botCards" class="flex gap-2"></div>
+        <div id="botStatus" class="text-[.7rem] text-[#898781] italic">Awaiting session…</div>
+      </div>
+    </div>
+
+    <!-- Board / pot -->
+    <div class="panel p-3">
+      <div class="flex items-center justify-between mb-2">
+        <span class="label-cap">Community Board</span>
+        <div class="flex items-center gap-3 text-xs num">
+          <span><span class="label-cap mr-1">Street</span><span id="streetEl" class="font-bold text-[#c3c2b7]">—</span></span>
+          <span><span class="label-cap mr-1">Pot</span><span id="potEl" class="font-bold text-[#fab219]">$0</span></span>
+        </div>
+      </div>
+      <div id="boardCards" class="flex gap-2 justify-center py-1.5"></div>
+    </div>
+
+    <!-- Player -->
+    <div class="panel p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <i data-lucide="user-round" class="w-4 h-4 text-[#3987e5]"></i>
+          <span class="label-cap">Your Book</span>
+          <span id="youTurnPill" class="pill pill-wait hidden">YOUR DECISION</span>
+        </div>
+        <div class="text-xs num"><span class="label-cap mr-1">To call</span><span id="toCallEl" class="font-bold">—</span></div>
+      </div>
+      <div id="playerCards" class="flex gap-2 mb-3"></div>
+      <div class="grid grid-cols-5 gap-1.5">
+        <button id="btnFold"  class="abtn abtn-fold" disabled>Fold</button>
+        <button id="btnCall"  class="abtn abtn-call" disabled>Check</button>
+        <button id="btnHalf"  class="abtn" disabled>Bet ½ Pot</button>
+        <button id="btnPot"   class="abtn" disabled>Bet Pot</button>
+        <button id="btnAllin" class="abtn abtn-allin" disabled>All-In</button>
+      </div>
+      <button id="btnDeal" class="abtn abtn-deal w-full mt-1.5">▶ Deal First Hand</button>
+    </div>
+
+    <!-- Action log -->
+    <div class="panel p-3 flex-1 min-h-[160px] flex flex-col">
+      <div class="flex items-center gap-2 mb-2">
+        <i data-lucide="scroll-text" class="w-4 h-4 text-[#898781]"></i>
+        <span class="label-cap">Execution Log</span>
+      </div>
+      <div id="log" class="overflow-y-auto flex-1 max-h-56 pr-1"></div>
+    </div>
+  </section>
+
+  <!-- ~~~~~~~~~~~~~~~~ RIGHT: QUANT ANALYTICS CENTER (60%) ~~~~~~~~~~~~~~~~ -->
+  <section class="xl:col-span-3 flex flex-col gap-3">
+
+    <!-- Regime selector + session KPIs -->
+    <div class="panel p-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+          <i data-lucide="globe" class="w-4 h-4 text-[#898781]"></i>
+          <span class="label-cap">Market Regime</span>
+          <select id="regimeSel" class="well text-xs font-bold px-2 py-1.5 outline-none cursor-pointer text-[#f2f3f5]">
+            <option value="bull">BULL MARKET — aggressive flow</option>
+            <option value="bear">BEAR MARKET — risk-off, tight</option>
+            <option value="vol">HIGH VOLATILITY — erratic</option>
+          </select>
+        </div>
+        <div class="ml-auto flex gap-5 text-xs num">
+          <div><span class="label-cap mr-1">Record</span><span id="kpiRecord" class="font-bold">0W / 0L</span></div>
+          <div><span class="label-cap mr-1">Peak Equity</span><span id="kpiPeak" class="font-bold">$10,000</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI stat tiles -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="panel p-3">
+        <div class="label-cap mb-1 flex items-center gap-1.5"><i data-lucide="wallet" class="w-3.5 h-3.5"></i>Total Capital</div>
+        <div id="kpiCapital" class="text-xl font-extrabold num">$10,000</div>
+        <div id="kpiCapitalDelta" class="text-[.7rem] num text-[#898781] mt-0.5">±$0 session</div>
+      </div>
+      <div class="panel p-3">
+        <div class="label-cap mb-1 flex items-center gap-1.5"><i data-lucide="sigma" class="w-3.5 h-3.5"></i>Expected Value</div>
+        <div id="kpiEv" class="text-xl font-extrabold num text-[#898781]">—</div>
+        <div class="text-[.7rem] text-[#898781] mt-0.5">of facing decision</div>
+      </div>
+      <div class="panel p-3">
+        <div class="label-cap mb-1 flex items-center gap-1.5"><i data-lucide="scale" class="w-3.5 h-3.5"></i>Risk : Reward</div>
+        <div id="kpiRr" class="text-xl font-extrabold num text-[#898781]">—</div>
+        <div id="kpiPotOdds" class="text-[.7rem] num text-[#898781] mt-0.5">breakeven eq —</div>
+      </div>
+      <div class="panel p-3">
+        <div class="label-cap mb-1 flex items-center gap-1.5"><i data-lucide="percent" class="w-3.5 h-3.5"></i>Kelly Sizing</div>
+        <div id="kpiKelly" class="text-xl font-extrabold num text-[#898781]">—</div>
+        <div id="kpiKellyUsd" class="text-[.7rem] num text-[#898781] mt-0.5">rec. risk —</div>
+      </div>
+    </div>
+
+    <!-- Decision desk -->
+    <div class="panel p-3">
+      <div class="flex items-center justify-between mb-1.5">
+        <div class="flex items-center gap-2">
+          <i data-lucide="crosshair" class="w-4 h-4 text-[#898781]"></i>
+          <span class="label-cap">Decision Desk — win/loss equity</span>
+        </div>
+        <span id="deskState" class="text-[.7rem] text-[#898781] italic">no live decision</span>
+      </div>
+      <div class="grid grid-cols-3 gap-3 text-center num">
+        <div class="well p-2">
+          <div class="label-cap">Win Probability</div>
+          <div id="deskEq" class="text-lg font-bold">—</div>
+        </div>
+        <div class="well p-2">
+          <div class="label-cap">Potential Win</div>
+          <div id="deskPot" class="text-lg font-bold">—</div>
+        </div>
+        <div class="well p-2">
+          <div class="label-cap">Cost to Continue</div>
+          <div id="deskCost" class="text-lg font-bold">—</div>
+        </div>
+      </div>
+      <p class="text-[.68rem] text-[#898781] mt-2 leading-relaxed">
+        Equity from a 500-trial Monte Carlo rollout of your hand vs. a uniform-random opponent hand to the river.
+        EV = (Win% × PotentialWin) − (Loss% × CostToContinue). Kelly f* = p − q/b, b = PotentialWin / Cost.
+      </p>
+    </div>
+
+    <!-- Chart -->
+    <div class="panel p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <i data-lucide="line-chart" class="w-4 h-4 text-[#898781]"></i>
+          <span class="label-cap">Trading Ledger — Theoretical EV vs Realized PnL ($, cumulative)</span>
+        </div>
+      </div>
+      <div class="relative h-56"><canvas id="pnlChart"></canvas></div>
+    </div>
+
+    <!-- Ledger table (accessible data view of the chart) -->
+    <div class="panel p-3">
+      <div class="flex items-center gap-2 mb-2">
+        <i data-lucide="table-2" class="w-4 h-4 text-[#898781]"></i>
+        <span class="label-cap">Hand Ledger</span>
+      </div>
+      <div class="overflow-x-auto max-h-40 overflow-y-auto">
+        <table class="w-full text-[.72rem] num">
+          <thead class="text-left sticky top-0 bg-[#131722]">
+            <tr class="text-[#898781]">
+              <th class="py-1 pr-3 font-semibold">#</th>
+              <th class="py-1 pr-3 font-semibold">Result</th>
+              <th class="py-1 pr-3 font-semibold text-right">Net</th>
+              <th class="py-1 pr-3 font-semibold text-right">Hand EV</th>
+              <th class="py-1 pr-3 font-semibold text-right">Cum EV</th>
+              <th class="py-1 font-semibold text-right">Cum PnL</th>
+            </tr>
+          </thead>
+          <tbody id="ledgerBody">
+            <tr><td colspan="6" class="py-2 text-[#898781] italic">No hands settled yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ==================== RISK MANAGER FREEZE OVERLAY ==================== -->
+<div id="freezeOverlay">
+  <div id="freezeBox" class="panel max-w-md w-full mx-4 p-8 text-center border-2" style="border-color:var(--crit)">
+    <i data-lucide="shield-alert" class="w-12 h-12 mx-auto mb-3" style="color:var(--crit)"></i>
+    <h2 class="text-lg font-extrabold tracking-widest mb-1" style="color:var(--crit)">RISK MANAGER FREEZE</h2>
+    <p class="text-xs text-[#c3c2b7] mb-4 leading-relaxed">
+      Max drawdown limit breached: equity fell <b>≥ 20%</b> from session peak.<br>
+      All order entry is locked. Breathe. Review the ledger, not your feelings.
+    </p>
+    <div class="text-4xl font-extrabold num blink" id="freezeCountdown">30</div>
+    <div class="label-cap mt-1">seconds until desk re-opens</div>
+  </div>
+</div>
+
+<!-- ==================== SESSION OVER OVERLAY ==================== -->
+<div id="gameOverOverlay">
+  <div class="panel max-w-md w-full mx-4 p-8 text-center">
+    <i data-lucide="skull" class="w-12 h-12 mx-auto mb-3 text-[#898781]"></i>
+    <h2 class="text-lg font-extrabold tracking-widest mb-2">CAPITAL DEPLETED</h2>
+    <p class="text-xs text-[#c3c2b7] mb-5">Your book can no longer post the big blind. The desk has closed your session.</p>
+    <button id="btnRestart" class="abtn abtn-deal px-6">Restart Session ($10,000)</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================================
+   QUANTPOKER ENGINE
+   Single-player heads-up Texas Hold'em vs a market-regime bot, instrumented like a
+   trading desk. Documented simplifications:
+     • Heads-up only, blinds $50/$100, dealer (button) posts SB and acts first preflop.
+     • The bot ("counterparty") is re-capitalized to $10,000 every hand — it models a
+       market with infinite liquidity; only YOUR capital persists across hands.
+     • Raises are capped at 3 per street; a short call refunds the excess to the bettor
+       (no side pots needed heads-up).
+     • Equity estimation: Monte Carlo rollout (see estimateEquity) vs a uniform-random
+       opponent hand. This is a documented heuristic — the bots actually play range-
+       filtered hands, so true equity vs a tight bot is lower than shown. Part of the
+       lesson: models are approximations.
+   ===================================================================================== */
+
+/* ------------------------------ CONFIG ------------------------------ */
+const CFG = {
+  startCapital: 10000,
+  sb: 50, bb: 100,
+  maxRaisesPerStreet: 3,
+  botDelayMs: 750,          // bot "think" time (test hook can shrink this)
+  freezeMs: 30000,          // Risk Manager Freeze duration
+  ddLimit: 0.20,            // 20% peak-to-trough drawdown triggers freeze
+  revengeMs: 1500,          // clicking bet/call this soon after a loss = revenge trade
+  mcItersUI: 500,           // Monte Carlo trials for the player's decision desk
+  mcItersBot: 150,          // Monte Carlo trials for bot decisions (cheaper)
+};
+
+/* ------------------------------ DECK & SHUFFLE ------------------------------ */
+const RANK_CHARS = '23456789TJQKA';          // r = 2..14
+const SUIT_CHARS = 'shdc';                   // s = 0..3 (spade heart diamond club)
+const SUIT_SYM   = ['♠','♥','♦','♣'];
+
+function makeDeck(){
+  const d = [];
+  for (let r = 2; r <= 14; r++) for (let s = 0; s < 4; s++) d.push({ r, s });
+  return d;
+}
+/* Fisher–Yates: iterate from the top, swap each card with a uniformly random
+   card at or below it. Unbiased for a uniform RNG. */
+function shuffle(deck){
+  for (let i = deck.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+const card = str => ({ r: RANK_CHARS.indexOf(str[0]) + 2, s: SUIT_CHARS.indexOf(str[1]) });
+const cardStr = c => RANK_CHARS[c.r - 2] + SUIT_CHARS[c.s];
+
+/* ------------------------------ HAND EVALUATOR (exact) ------------------------------
+   evaluate5 maps any 5 cards to a single comparable integer:
+     score = category·15^5 + t1·15^4 + … + t5   (base-15 packing of tiebreakers)
+   Categories: 8 straight flush, 7 quads, 6 full house, 5 flush, 4 straight,
+               3 trips, 2 two pair, 1 pair, 0 high card.
+   evaluate7 takes the max over all C(7,5)=21 five-card subsets — exact, no heuristic. */
+function evaluate5(cs){
+  const ranks = cs.map(c => c.r).sort((a, b) => b - a);
+  const flush = cs.every(c => c.s === cs[0].s);
+  const cnt = {};
+  for (const r of ranks) cnt[r] = (cnt[r] || 0) + 1;
+  const groups = Object.entries(cnt).map(([r, c]) => ({ r: +r, c }))
+    .sort((a, b) => b.c - a.c || b.r - a.r);
+  let straightHigh = 0;
+  if (groups.length === 5){
+    if (ranks[0] - ranks[4] === 4) straightHigh = ranks[0];
+    else if (ranks[0] === 14 && ranks[1] === 5) straightHigh = 5;   // wheel A-5-4-3-2
+  }
+  let cat, tie;
+  if (flush && straightHigh)                    { cat = 8; tie = [straightHigh]; }
+  else if (groups[0].c === 4)                   { cat = 7; tie = [groups[0].r, groups[1].r]; }
+  else if (groups[0].c === 3 && groups[1].c===2){ cat = 6; tie = [groups[0].r, groups[1].r]; }
+  else if (flush)                               { cat = 5; tie = ranks; }
+  else if (straightHigh)                        { cat = 4; tie = [straightHigh]; }
+  else if (groups[0].c === 3)                   { cat = 3; tie = groups.map(g => g.r); }
+  else if (groups[0].c === 2 && groups[1].c===2){ cat = 2; tie = groups.map(g => g.r); }
+  else if (groups[0].c === 2)                   { cat = 1; tie = groups.map(g => g.r); }
+  else                                          { cat = 0; tie = ranks; }
+  let score = cat;
+  for (let i = 0; i < 5; i++) score = score * 15 + (tie[i] || 0);
+  return score;
+}
+function evaluate7(cards){
+  let best = -1;
+  for (let i = 0; i < 6; i++) for (let j = i + 1; j < 7; j++){
+    const five = [];
+    for (let k = 0; k < 7; k++) if (k !== i && k !== j) five.push(cards[k]);
+    const s = evaluate5(five);
+    if (s > best) best = s;
+  }
+  return best;
+}
+const CAT_NAMES = ['High Card','Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush'];
+const handName = score => CAT_NAMES[Math.floor(score / Math.pow(15, 5))];
+
+/* ------------------------------ EQUITY: MONTE CARLO ROLLOUT ------------------------------
+   Deal the opponent a uniform-random hand + complete the board at random `iters` times;
+   equity = (wins + ties/2) / iters. 500 trials ⇒ std-error ≈ √(0.25/500) ≈ 2.2 pts. */
+function estimateEquity(hole, board, iters){
+  const seen = new Set([...hole, ...board].map(cardStr));
+  const rest = makeDeck().filter(c => !seen.has(cardStr(c)));
+  const need = 2 + (5 - board.length);
+  const idx = rest.map((_, i) => i);
+  let win = 0, tie = 0;
+  for (let n = 0; n < iters; n++){
+    for (let i = 0; i < need; i++){                      // partial Fisher–Yates draw
+      const j = i + Math.floor(Math.random() * (idx.length - i));
+      [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    const opp = [rest[idx[0]], rest[idx[1]]];
+    const full = board.concat(idx.slice(2, need).map(i => rest[i]));
+    const ms = evaluate7(hole.concat(full));
+    const os = evaluate7(opp.concat(full));
+    if (ms > os) win++; else if (ms === os) tie++;
+  }
+  return (win + tie / 2) / iters;
+}
+
+/* ------------------------------ DECISION MATH (pure, testable) ------------------------------
+   EV       = p·PotentialWin − q·Cost         (spec formula; PotentialWin = current pot)
+   R:R      = PotentialWin / Cost             (pot odds offered)
+   Kelly f* = (b·p − q)/b = p − q/b, b = PotentialWin/Cost, clamped at 0 (never bet -EV) */
+function computeDecision(eq, pot, toCall){
+  if (toCall <= 0) return { eq, pot, toCall: 0, ev: null, rr: null, kelly: null, breakeven: null };
+  const q = 1 - eq;
+  const b = pot / toCall;
+  return {
+    eq, pot, toCall,
+    ev: eq * pot - q * toCall,
+    rr: b,
+    kelly: Math.max(0, eq - q / b),
+    breakeven: toCall / (pot + toCall),
+  };
+}
+
+/* ------------------------------ MARKET REGIME BOTS ------------------------------
+   Every bot perceives its Monte Carlo equity, then distorts and acts on it per profile. */
+const PROFILES = {
+  bull: {
+    name: 'BULL MARKET BOT',
+    preflopFold: 0.30,   // plays almost any two cards
+    foldMargin: -0.08,   // calls even slightly below pot odds — chases
+    betThresh: 0.44,     // bets a wide range for value
+    raiseThresh: 0.58,
+    aggression: 0.75,    // how often strength converts to a raise
+    bluffFreq: 0.15,
+    pairBoost: 0.10,     // overvalues any pair — "everything goes up"
+    noise: 0,
+    sizing: pot => pot * (0.8 + Math.random() * 0.5),   // 0.8–1.3× pot: bets large
+  },
+  bear: {
+    name: 'BEAR MARKET BOT',
+    preflopFold: 0.56,   // premium hands only
+    foldMargin: 0.15,    // needs a big edge over pot odds — folds to pressure
+    betThresh: 0.72,     // only bets near-nut strength
+    raiseThresh: 0.82,
+    aggression: 0.25,
+    bluffFreq: 0.02,
+    pairBoost: 0,
+    noise: 0,
+    sizing: pot => pot * 0.4,                            // small, risk-averse sizing
+  },
+  vol: {
+    name: 'HIGH VOLATILITY BOT',
+    preflopFold: 0.36,
+    foldMargin: 0.02,
+    betThresh: 0.50,
+    raiseThresh: 0.62,
+    aggression: 0.55,
+    bluffFreq: 0.30,     // frequent unpredictable bluffs
+    pairBoost: 0,
+    noise: 0.18,         // ±9pt random distortion of perceived equity
+    sizing: pot => pot * (0.3 + Math.random() * 1.7),    // 0.3–2.0× pot: erratic sizing
+  },
+};
+
+/* ------------------------------ GAME STATE ------------------------------ */
+const S = {
+  capital: CFG.startCapital, peak: CFG.startCapital, botStack: CFG.startCapital,
+  handNo: 0, dealerIsPlayer: false, profile: 'bull',
+  deck: [], board: [], hole: [], botHole: [],
+  pot: 0, street: 'idle', currentBet: 0, raises: 0,
+  committed: { p: 0, b: 0 }, need: { p: false, b: false },
+  toAct: null, handActive: false, revealBot: false,
+  playerAllIn: false, botAllIn: false,
+  handStartCapital: CFG.startCapital, handTheoEV: 0,
+  cumTheo: 0, wins: 0, losses: 0,
+  lastLossAt: -Infinity, frozen: false, over: false,
+  decision: null, botTimer: null,
+};
+
+const $ = id => document.getElementById(id);
+const fmt$ = v => (v < 0 ? '-$' : '$') + Math.abs(Math.round(v)).toLocaleString('en-US');
+const stackOf = a => a === 'p' ? S.capital : S.botStack;
+const nameOf  = a => a === 'p' ? 'YOU' : 'BOT';
+
+/* ------------------------------ LOG ------------------------------ */
+function log(msg, cls = 'sys'){
+  const el = document.createElement('div');
+  el.className = cls;
+  const t = new Date();
+  el.textContent = `[${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}] ${msg}`;
+  $('log').appendChild(el);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+/* ------------------------------ CHIP MOVEMENT ------------------------------ */
+function pay(actor, amt){
+  amt = Math.max(0, Math.min(amt, stackOf(actor)));
+  if (actor === 'p') S.capital -= amt; else S.botStack -= amt;
+  S.pot += amt;
+  S.committed[actor] += amt;
+  if (stackOf(actor) === 0){ if (actor === 'p') S.playerAllIn = true; else S.botAllIn = true; }
+  return amt;
+}
+
+/* ------------------------------ HAND LIFECYCLE ------------------------------ */
+function startHand(){
+  if (S.frozen || S.over || S.handActive) return;
+  if (S.capital < CFG.bb){ sessionOver(); return; }
+  S.handNo++;
+  S.dealerIsPlayer = !S.dealerIsPlayer;
+  S.botStack = CFG.startCapital;               // counterparty re-capitalized (see header note)
+  S.deck = shuffle(makeDeck());
+  S.board = []; S.pot = 0; S.street = 'preflop';
+  S.hole    = [S.deck.pop(), S.deck.pop()];
+  S.botHole = [S.deck.pop(), S.deck.pop()];
+  S.committed = { p: 0, b: 0 }; S.need = { p: true, b: true };
+  S.currentBet = 0; S.raises = 0;
+  S.playerAllIn = false; S.botAllIn = false; S.revealBot = false;
+  S.handStartCapital = S.capital; S.handTheoEV = 0;
+  S.handActive = true; S.decision = null;
+  const sbA = S.dealerIsPlayer ? 'p' : 'b';
+  const bbA = S.dealerIsPlayer ? 'b' : 'p';
+  log(`── HAND #${S.handNo} · ${nameOf(sbA)} on the button vs ${PROFILES[S.profile].name} ──`, 'sys');
+  pay(sbA, CFG.sb); pay(bbA, CFG.bb);
+  S.currentBet = CFG.bb;
+  log(`${nameOf(sbA)} posts SB $${CFG.sb} · ${nameOf(bbA)} posts BB $${CFG.bb}`, 'sys');
+  S.toAct = sbA;
+  render();
+  proceed();
+}
+
+function proceed(){
+  if (!S.handActive) return;
+  const a = S.toAct;
+  const allIn = a === 'p' ? S.playerAllIn : S.botAllIn;
+  if (allIn){                                   // can't act: auto-close their obligation
+    S.need[a] = false;
+    afterAction(a);
+    return;
+  }
+  if (a === 'b'){
+    setBotStatus('analyzing order flow…', true);
+    S.botTimer = setTimeout(botAct, CFG.botDelayMs);
+  } else {
+    preparePlayerTurn();
+  }
+}
+
+/* Central action executor — both player and bot route through here. */
+function act(actor, action, raiseTo = 0){
+  if (!S.handActive || S.toAct !== actor) return;
+  const other = actor === 'p' ? 'b' : 'p';
+  const toCall = S.currentBet - S.committed[actor];
+
+  if (action === 'fold'){
+    log(`${nameOf(actor)} folds.`, actor === 'p' ? 'you' : 'bot');
+    endHand(other, 'fold');
+    return;
+  }
+  if (action === 'check'){
+    if (toCall > 0) return;                     // illegal; ignore
+    log(`${nameOf(actor)} checks.`, actor === 'p' ? 'you' : 'bot');
+    S.need[actor] = false;
+    afterAction(actor);
+    return;
+  }
+  if (action === 'call'){
+    const paid = pay(actor, toCall);
+    if (paid < toCall){                         // short call all-in → refund excess to bettor
+      const refund = toCall - paid;
+      S.pot -= refund;
+      S.committed[other] -= refund;
+      if (other === 'p') S.capital += refund; else S.botStack += refund;
+      S.currentBet = S.committed[actor];
+      log(`${nameOf(actor)} calls $${paid} (all-in) · $${refund} returned to ${nameOf(other)}`, actor === 'p' ? 'you' : 'bot');
+    } else {
+      log(`${nameOf(actor)} calls $${paid}${stackOf(actor) === 0 ? ' (all-in)' : ''}.`, actor === 'p' ? 'you' : 'bot');
+    }
+    S.need[actor] = false;
+    afterAction(actor);
+    return;
+  }
+  if (action === 'raise'){
+    const maxTo = S.committed[actor] + stackOf(actor);
+    raiseTo = Math.min(Math.max(raiseTo, S.currentBet + CFG.bb), maxTo);   // min-raise = +1 BB
+    if (raiseTo <= S.currentBet){ act(actor, toCall > 0 ? 'call' : 'check'); return; }
+    pay(actor, raiseTo - S.committed[actor]);
+    S.currentBet = S.committed[actor];
+    S.raises++;
+    const verb = toCall > 0 ? 'raises to' : 'bets';
+    log(`${nameOf(actor)} ${verb} $${S.committed[actor]}${stackOf(actor) === 0 ? ' (ALL-IN)' : ''} · pot $${S.pot}`, actor === 'p' ? 'you' : 'bot');
+    S.need[actor] = false; S.need[other] = true;
+    afterAction(actor);
+  }
+}
+
+function afterAction(actor){
+  const other = actor === 'p' ? 'b' : 'p';
+  const matched = S.committed.p === S.committed.b;
+  if (matched && !S.need.p && !S.need.b){
+    advanceStreet();
+  } else {
+    S.toAct = other;
+    render();
+    proceed();
+  }
+}
+
+function advanceStreet(){
+  S.committed = { p: 0, b: 0 }; S.currentBet = 0; S.raises = 0;
+  S.need = { p: true, b: true };
+  if (S.street === 'river'){ showdown(); return; }
+  if (S.playerAllIn || S.botAllIn){ runout(); return; }
+  if (S.street === 'preflop'){ S.street = 'flop'; S.board.push(S.deck.pop(), S.deck.pop(), S.deck.pop()); }
+  else if (S.street === 'flop'){ S.street = 'turn'; S.board.push(S.deck.pop()); }
+  else if (S.street === 'turn'){ S.street = 'river'; S.board.push(S.deck.pop()); }
+  log(`${S.street.toUpperCase()} · board ${S.board.map(prettyCard).join(' ')}`, 'sys');
+  S.toAct = S.dealerIsPlayer ? 'b' : 'p';       // non-button acts first postflop
+  render();
+  proceed();
+}
+
+/* All-in with bets matched: reveal and deal the remaining board on a timer. */
+function runout(){
+  S.revealBot = true;
+  render();
+  const step = () => {
+    if (!S.handActive) return;
+    if (S.street === 'river' || S.board.length === 5){ showdown(); return; }
+    if (S.street === 'preflop'){ S.street = 'flop'; S.board.push(S.deck.pop(), S.deck.pop(), S.deck.pop()); }
+    else if (S.street === 'flop'){ S.street = 'turn'; S.board.push(S.deck.pop()); }
+    else if (S.street === 'turn'){ S.street = 'river'; S.board.push(S.deck.pop()); }
+    log(`${S.street.toUpperCase()} · board ${S.board.map(prettyCard).join(' ')}`, 'sys');
+    render();
+    setTimeout(step, CFG.botDelayMs);
+  };
+  setTimeout(step, CFG.botDelayMs);
+}
+
+function showdown(){
+  S.street = 'showdown'; S.revealBot = true;
+  const ps = evaluate7(S.hole.concat(S.board));
+  const bs = evaluate7(S.botHole.concat(S.board));
+  log(`SHOWDOWN — YOU: ${S.hole.map(prettyCard).join(' ')} (${handName(ps)}) vs BOT: ${S.botHole.map(prettyCard).join(' ')} (${handName(bs)})`, 'sys');
+  if (ps > bs) endHand('p', 'showdown');
+  else if (bs > ps) endHand('b', 'showdown');
+  else endHand(null, 'chop');
+}
+
+function endHand(winner, how){
+  S.handActive = false; S.toAct = null; S.decision = null;
+  clearTimeout(S.botTimer);
+  if (winner === 'p'){ S.capital += S.pot; log(`YOU win the pot: ${fmt$(S.pot)} (${how})`, 'win'); }
+  else if (winner === 'b'){ S.botStack += S.pot; log(`BOT wins the pot: ${fmt$(S.pot)} (${how})`, 'lose'); }
+  else { S.capital += S.pot / 2; S.botStack += S.pot / 2; log(`Chopped pot: ${fmt$(S.pot)} split.`, 'sys'); }
+  const delta = S.capital - S.handStartCapital;
+  if (delta < 0){ S.losses++; S.lastLossAt = Date.now(); }
+  else if (delta > 0) S.wins++;
+  S.cumTheo += S.handTheoEV;
+  pushChartPoint(delta);
+  S.peak = Math.max(S.peak, S.capital);
+  render();
+  if (S.capital < CFG.bb){ sessionOver(); return; }
+  riskCheck();
+}
+
+/* ------------------------------ BOT BRAIN ------------------------------ */
+function botAct(){
+  if (!S.handActive || S.toAct !== 'b') return;
+  const P = PROFILES[S.profile];
+  let eq = estimateEquity(S.botHole, S.board, CFG.mcItersBot);
+  // profile distortions of perceived equity:
+  if (P.pairBoost > 0 && botHasPair()) eq += P.pairBoost;              // bull overvalues pairs
+  if (P.noise > 0) eq += (Math.random() - 0.5) * 2 * P.noise;          // high-vol misreads
+  eq = Math.min(0.99, Math.max(0.01, eq));
+  const toCall = S.currentBet - S.committed.b;
+  const canRaise = S.raises < CFG.maxRaisesPerStreet && S.botStack > toCall;
+
+  if (toCall > 0){
+    const potOdds = toCall / (S.pot + toCall);
+    // preflop range filter: fold junk when facing chips (free checks never folded)
+    if (S.street === 'preflop' && eq < P.preflopFold && Math.random() > P.bluffFreq){
+      setBotStatus('passes — out of range'); act('b', 'fold'); return;
+    }
+    if (eq < potOdds + P.foldMargin && Math.random() > P.bluffFreq){
+      setBotStatus('cuts risk — folds to pressure'); act('b', 'fold'); return;
+    }
+    if (canRaise && eq > P.raiseThresh && Math.random() < P.aggression){
+      const to = roundBet(S.committed.b + toCall + P.sizing(S.pot));
+      setBotStatus('presses its edge — raises'); act('b', 'raise', to); return;
+    }
+    setBotStatus('calls the market'); act('b', 'call'); return;
+  }
+  // no bet faced: value bet, bluff, or check
+  if (canRaise && (eq > P.betThresh && Math.random() < P.aggression + 0.15)){
+    const to = roundBet(S.committed.b + P.sizing(S.pot));
+    setBotStatus('opens size — value bet'); act('b', 'raise', to); return;
+  }
+  if (canRaise && Math.random() < P.bluffFreq){
+    const to = roundBet(S.committed.b + P.sizing(S.pot));
+    setBotStatus('paints the tape — aggression'); act('b', 'raise', to); return;
+  }
+  setBotStatus('checks — no signal'); act('b', 'check');
+}
+function botHasPair(){
+  if (S.botHole[0].r === S.botHole[1].r) return true;
+  return S.board.some(c => c.r === S.botHole[0].r || c.r === S.botHole[1].r);
+}
+const roundBet = x => Math.max(CFG.bb, Math.round(x / 25) * 25);
+
+/* ------------------------------ PLAYER TURN & DECISION DESK ------------------------------ */
+function preparePlayerTurn(){
+  const eq = estimateEquity(S.hole, S.board, CFG.mcItersUI);
+  const toCall = S.currentBet - S.committed.p;
+  S.decision = computeDecision(eq, S.pot, toCall);
+  render();
+}
+
+function playerDo(action){
+  if (S.frozen || !S.handActive || S.toAct !== 'p') return;
+  const aggressive = action !== 'fold';
+  if (aggressive && Date.now() - S.lastLossAt < CFG.revengeMs) flashRevenge();
+
+  const d = S.decision;
+  const toCall = S.currentBet - S.committed.p;
+
+  if (action === 'fold'){ act('p', 'fold'); return; }
+  if (action === 'call'){
+    if (toCall > 0 && d && d.ev !== null) S.handTheoEV += d.ev;   // book the EV of the call
+    act('p', toCall > 0 ? 'call' : 'check');
+    return;
+  }
+  // sizing actions: book EV of the chips added (fold equity ignored — conservative)
+  let raiseTo;
+  if (action === 'half')      raiseTo = S.committed.p + toCall + Math.max(CFG.bb, Math.round(S.pot / 2 / 25) * 25);
+  else if (action === 'pot')  raiseTo = S.committed.p + toCall + Math.max(CFG.bb, Math.round(S.pot / 25) * 25);
+  else if (action === 'allin')raiseTo = S.committed.p + S.capital;
+  if (action === 'allin' && toCall >= S.capital){                 // all-in is just a call
+    if (d && d.eq != null) S.handTheoEV += d.eq * S.pot - (1 - d.eq) * Math.min(toCall, S.capital);
+    act('p', 'call');
+    return;
+  }
+  const risk = Math.min(raiseTo, S.committed.p + S.capital) - S.committed.p;
+  if (d && d.eq != null && risk > 0) S.handTheoEV += d.eq * S.pot - (1 - d.eq) * risk;
+  act('p', 'raise', raiseTo);
+}
+
+/* ------------------------------ TILT GUARD ------------------------------ */
+let freezeTimer = null;
+function riskCheck(){
+  const dd = (S.peak - S.capital) / S.peak;
+  if (!S.frozen && dd >= CFG.ddLimit) triggerFreeze();
+}
+function triggerFreeze(){
+  S.frozen = true;
+  $('freezeOverlay').classList.add('on');
+  log(`⛔ RISK MANAGER FREEZE — drawdown ${( (S.peak - S.capital) / S.peak * 100).toFixed(1)}% breached the 20% limit. Desk locked ${Math.round(CFG.freezeMs/1000)}s.`, 'lose');
+  const t0 = Date.now();
+  const tick = () => {
+    const left = Math.max(0, CFG.freezeMs - (Date.now() - t0));
+    $('freezeCountdown').textContent = Math.ceil(left / 1000);
+    if (left <= 0){
+      clearInterval(freezeTimer);
+      S.frozen = false;
+      S.peak = S.capital;      // fresh risk budget after the freeze — avoids instant re-trigger
+      $('freezeOverlay').classList.remove('on');
+      log('Desk re-opened. Risk budget reset to current equity.', 'sys');
+      render();
+    }
+  };
+  tick();
+  freezeTimer = setInterval(tick, 250);
+}
+let revengeTimer = null;
+function flashRevenge(){
+  const b = $('revengeBanner');
+  b.classList.remove('on'); void b.offsetWidth;   // restart CSS animation
+  b.classList.add('on');
+  log('⚠ EMOTIONAL OVERRIDE DETECTED — action taken <1.5s after a loss. Stick to the system.', 'lose');
+  clearTimeout(revengeTimer);
+  revengeTimer = setTimeout(() => b.classList.remove('on'), 2600);
+}
+function sessionOver(){
+  S.over = true;
+  $('gameOverOverlay').classList.add('on');
+}
+
+/* ------------------------------ CHART (Chart.js 4, dual line) ------------------------------ */
+const CHART_C = { s1: '#3987e5', s2: '#199e70', grid: '#2c2c2a', muted: '#898781', ink2: '#c3c2b7' };
+/* End-of-line direct labels so identity is never color-alone (2-series legend also shown). */
+const endLabelPlugin = {
+  id: 'endLabels',
+  afterDatasetsDraw(chart){
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '600 10px system-ui, sans-serif';
+    const placed = [];
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      const pt = meta.data[meta.data.length - 1];
+      if (!pt) return;
+      let y = pt.y;
+      for (const py of placed) if (Math.abs(py - y) < 12) y = py + (y >= py ? 12 : -12);
+      placed.push(y);
+      ctx.fillStyle = ds.borderColor;
+      ctx.fillText(ds.label === 'Theoretical EV' ? 'THEO EV' : 'REAL PNL', Math.min(pt.x + 6, chart.chartArea.right - 4), y + 3);
+    });
+    ctx.restore();
+  }
+};
+let chart = null;
+function initChart(){
+  chart = new Chart($('pnlChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [0],
+      datasets: [
+        { label: 'Theoretical EV', data: [0], borderColor: CHART_C.s1, backgroundColor: CHART_C.s1,
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: 0.25 },
+        { label: 'Realized PnL', data: [0], borderColor: CHART_C.s2, backgroundColor: CHART_C.s2,
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: 0.25 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 220 },
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { right: 58 } },
+      scales: {
+        x: { title: { display: true, text: 'Hand #', color: CHART_C.muted, font: { size: 10 } },
+             grid: { color: CHART_C.grid }, ticks: { color: CHART_C.muted, maxTicksLimit: 12 } },
+        y: { grid: { color: CHART_C.grid },
+             ticks: { color: CHART_C.muted, callback: v => fmt$(v) } },
+      },
+      plugins: {
+        legend: { labels: { color: CHART_C.ink2, usePointStyle: true, pointStyleWidth: 8, boxHeight: 6, font: { size: 11 } } },
+        tooltip: {
+          backgroundColor: '#0f131c', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1,
+          titleColor: CHART_C.ink2, bodyColor: '#f2f3f5', padding: 10,
+          callbacks: {
+            title: items => `Hand ${items[0].label}`,
+            label: item => ` ${item.dataset.label}: ${fmt$(item.parsed.y)}`,
+          },
+        },
+      },
+    },
+    plugins: [endLabelPlugin],
+  });
+}
+function pushChartPoint(handDelta){
+  const cumReal = S.capital - CFG.startCapital;
+  chart.data.labels.push(S.handNo);
+  chart.data.datasets[0].data.push(Math.round(S.cumTheo));
+  chart.data.datasets[1].data.push(Math.round(cumReal));
+  chart.update();
+  // ledger table row (accessible view of the same data)
+  const body = $('ledgerBody');
+  if (body.firstElementChild && body.firstElementChild.children.length === 1) body.innerHTML = '';
+  const tr = document.createElement('tr');
+  tr.className = 'border-t hairline';
+  const res = handDelta > 0 ? 'WIN' : handDelta < 0 ? 'LOSS' : 'CHOP';
+  const resColor = handDelta > 0 ? 'style="color:var(--good)"' : handDelta < 0 ? 'style="color:var(--crit)"' : '';
+  tr.innerHTML =
+    `<td class="py-1 pr-3">${S.handNo}</td>` +
+    `<td class="py-1 pr-3 font-bold" ${resColor}>${res}</td>` +
+    `<td class="py-1 pr-3 text-right">${fmt$(handDelta)}</td>` +
+    `<td class="py-1 pr-3 text-right">${fmt$(S.handTheoEV)}</td>` +
+    `<td class="py-1 pr-3 text-right">${fmt$(S.cumTheo)}</td>` +
+    `<td class="py-1 text-right font-bold">${fmt$(cumReal)}</td>`;
+  body.prepend(tr);
+  while (body.children.length > 40) body.removeChild(body.lastChild);
+}
+
+/* ------------------------------ RENDERING ------------------------------ */
+function prettyCard(c){ return RANK_CHARS[c.r - 2] + SUIT_SYM[c.s]; }
+function cardEl(c, opts = {}){
+  const d = document.createElement('div');
+  if (!c){ d.className = 'pcard slot'; return d; }
+  if (opts.back){ d.className = 'pcard back'; return d; }
+  const red = c.s === 1 || c.s === 2;
+  d.className = 'pcard' + (red ? ' red' : '') + (opts.winner ? ' winner' : '');
+  d.innerHTML = `<span class="rank">${RANK_CHARS[c.r - 2]}</span><span class="suit">${SUIT_SYM[c.s]}</span>`;
+  return d;
+}
+function setBotStatus(txt, thinking = false){
+  $('botStatus').textContent = txt;
+  $('botStatus').className = 'text-[.7rem] italic ' + (thinking ? 'text-[#fab219] blink' : 'text-[#898781]');
+}
+
+function render(){
+  // header ticker
+  $('tickCapital').textContent = fmt$(S.capital);
+  const pnl = S.capital - CFG.startCapital;
+  $('tickPnl').textContent = (pnl >= 0 ? '+' : '') + fmt$(pnl).replace('$-', '-$');
+  $('tickPnl').style.color = pnl > 0 ? 'var(--good)' : pnl < 0 ? 'var(--crit)' : 'var(--ink)';
+  const dd = S.peak > 0 ? (S.peak - S.capital) / S.peak * 100 : 0;
+  $('tickDd').textContent = dd.toFixed(1) + '%';
+  $('tickDd').style.color = dd >= 15 ? 'var(--crit)' : dd >= 8 ? 'var(--warn)' : 'var(--ink)';
+  $('tickHand').textContent = S.handNo || '—';
+  const pill = $('statusPill');
+  if (S.frozen){ pill.textContent = 'FROZEN'; pill.className = 'pill'; pill.style.cssText = 'color:var(--crit);border-color:var(--crit)'; }
+  else if (S.handActive && S.toAct === 'p'){ pill.textContent = 'YOUR ACTION'; pill.className = 'pill pill-turn'; pill.style.cssText = ''; }
+  else if (S.handActive){ pill.textContent = 'LIVE'; pill.className = 'pill pill-live'; pill.style.cssText = ''; }
+  else { pill.textContent = 'IDLE'; pill.className = 'pill pill-wait'; pill.style.cssText = ''; }
+
+  // table
+  $('botNameEl').textContent = PROFILES[S.profile].name;
+  $('botStackEl').textContent = fmt$(S.botStack);
+  const bc = $('botCards'); bc.innerHTML = '';
+  if (!S.handNo){ bc.append(cardEl(null), cardEl(null)); }
+  else if (S.revealBot){ S.botHole.forEach(c => bc.append(cardEl(c))); }
+  else { bc.append(cardEl(S.botHole[0], { back: true }), cardEl(S.botHole[1], { back: true })); }
+  const bd = $('boardCards'); bd.innerHTML = '';
+  for (let i = 0; i < 5; i++) bd.append(cardEl(S.board[i] || null));
+  $('streetEl').textContent = S.street === 'idle' ? '—' : S.street.toUpperCase();
+  $('potEl').textContent = fmt$(S.pot);
+  const pc = $('playerCards'); pc.innerHTML = '';
+  if (S.hole.length) S.hole.forEach(c => pc.append(cardEl(c))); else pc.append(cardEl(null), cardEl(null));
+
+  // action buttons
+  const myTurn = S.handActive && S.toAct === 'p' && !S.frozen;
+  const toCall = myTurn ? S.currentBet - S.committed.p : 0;
+  $('youTurnPill').classList.toggle('hidden', !myTurn);
+  $('toCallEl').textContent = myTurn && toCall > 0 ? fmt$(toCall) : myTurn ? '$0' : '—';
+  $('btnFold').disabled = !myTurn;
+  $('btnCall').disabled = !myTurn;
+  $('btnCall').textContent = !myTurn ? 'Check' : toCall > 0 ? `Call ${fmt$(Math.min(toCall, S.capital))}` : 'Check';
+  const canRaise = myTurn && S.raises < CFG.maxRaisesPerStreet && S.capital > toCall;
+  $('btnHalf').disabled = !canRaise;
+  $('btnPot').disabled = !canRaise;
+  $('btnHalf').textContent = toCall > 0 ? 'Raise ½ Pot' : 'Bet ½ Pot';
+  $('btnPot').textContent  = toCall > 0 ? 'Raise Pot'   : 'Bet Pot';
+  $('btnAllin').disabled = !myTurn || S.capital <= 0;
+  $('btnDeal').style.display = (!S.handActive && !S.over) ? 'block' : 'none';
+  $('btnDeal').textContent = S.handNo ? '▶ Deal Next Hand' : '▶ Deal First Hand';
+  if (!S.handActive && S.handNo) setBotStatus('position closed — awaiting next hand');
+
+  // KPI tiles + decision desk
+  $('kpiCapital').textContent = fmt$(S.capital);
+  $('kpiCapitalDelta').textContent = `${pnl >= 0 ? '+' : ''}${fmt$(pnl).replace('$-','-$')} session`;
+  $('kpiCapitalDelta').style.color = pnl > 0 ? 'var(--good)' : pnl < 0 ? 'var(--crit)' : 'var(--muted)';
+  $('kpiRecord').textContent = `${S.wins}W / ${S.losses}L`;
+  $('kpiPeak').textContent = fmt$(S.peak);
+  const d = myTurn ? S.decision : null;
+  if (d && d.toCall > 0){
+    $('kpiEv').textContent = fmt$(d.ev);
+    $('kpiEv').style.color = d.ev >= 0 ? 'var(--good)' : 'var(--crit)';
+    $('kpiRr').textContent = d.rr.toFixed(2) + ' : 1';
+    $('kpiRr').style.color = 'var(--ink)';
+    $('kpiPotOdds').textContent = `breakeven eq ${(d.breakeven * 100).toFixed(1)}%`;
+    $('kpiKelly').textContent = (d.kelly * 100).toFixed(1) + '%';
+    $('kpiKelly').style.color = d.kelly > 0 ? 'var(--ink)' : 'var(--muted)';
+    $('kpiKellyUsd').textContent = d.kelly > 0 ? `rec. risk ${fmt$(d.kelly * S.capital)}` : 'no +EV size — fold/check';
+    $('deskState').textContent = 'FACING BET — decision live';
+    $('deskState').style.color = 'var(--warn)';
+    $('deskEq').textContent = (d.eq * 100).toFixed(1) + '%';
+    $('deskPot').textContent = fmt$(d.pot);
+    $('deskCost').textContent = fmt$(Math.min(d.toCall, S.capital));
+  } else if (d){
+    $('kpiEv').textContent = '—'; $('kpiEv').style.color = 'var(--muted)';
+    $('kpiRr').textContent = '—'; $('kpiRr').style.color = 'var(--muted)';
+    $('kpiPotOdds').textContent = 'no bet faced';
+    $('kpiKelly').textContent = '—'; $('kpiKelly').style.color = 'var(--muted)';
+    $('kpiKellyUsd').textContent = 'free look — check or bet';
+    $('deskState').textContent = 'option to check — no cost';
+    $('deskState').style.color = 'var(--muted)';
+    $('deskEq').textContent = (d.eq * 100).toFixed(1) + '%';
+    $('deskPot').textContent = fmt$(S.pot);
+    $('deskCost').textContent = '$0';
+  } else {
+    $('kpiEv').textContent = '—'; $('kpiEv').style.color = 'var(--muted)';
+    $('kpiRr').textContent = '—'; $('kpiRr').style.color = 'var(--muted)';
+    $('kpiPotOdds').textContent = 'breakeven eq —';
+    $('kpiKelly').textContent = '—'; $('kpiKelly').style.color = 'var(--muted)';
+    $('kpiKellyUsd').textContent = 'rec. risk —';
+    $('deskState').textContent = 'no live decision';
+    $('deskState').style.color = 'var(--muted)';
+    $('deskEq').textContent = '—'; $('deskPot').textContent = '—'; $('deskCost').textContent = '—';
+  }
+}
+
+/* ------------------------------ WIRING ------------------------------ */
+$('btnDeal').addEventListener('click', startHand);
+$('btnFold').addEventListener('click', () => playerDo('fold'));
+$('btnCall').addEventListener('click', () => playerDo('call'));
+$('btnHalf').addEventListener('click', () => playerDo('half'));
+$('btnPot').addEventListener('click', () => playerDo('pot'));
+$('btnAllin').addEventListener('click', () => playerDo('allin'));
+$('regimeSel').addEventListener('change', e => {
+  S.profile = e.target.value;
+  log(`REGIME SHIFT → ${PROFILES[S.profile].name} now on the other side of your trades.`, 'sys');
+  render();
+});
+$('btnRestart').addEventListener('click', () => {
+  S.capital = CFG.startCapital; S.peak = CFG.startCapital; S.over = false;
+  S.wins = 0; S.losses = 0; S.handNo = 0; S.cumTheo = 0; S.handTheoEV = 0;
+  S.hole = []; S.botHole = []; S.board = []; S.pot = 0; S.street = 'idle';
+  chart.data.labels = [0];
+  chart.data.datasets[0].data = [0];
+  chart.data.datasets[1].data = [0];
+  chart.update();
+  $('ledgerBody').innerHTML = '<tr><td colspan="6" class="py-2 text-[#898781] italic">No hands settled yet.</td></tr>';
+  $('gameOverOverlay').classList.remove('on');
+  log('Session restarted with fresh $10,000.', 'sys');
+  render();
+});
+
+initChart();
+render();
+log('Desk online. Select a market regime and deal the first hand.', 'sys');
+if (window.lucide) lucide.createIcons();
+
+/* Test/debug API — lets automated checks drive the engine deterministically. */
+window.QP = { S, CFG, PROFILES, startHand, playerDo, act, estimateEquity, evaluate5, evaluate7,
+              computeDecision, card, cardStr, handName, riskCheck, triggerFreeze, flashRevenge,
+              get chart(){ return chart; } };
+</script>
+</body>
+</html>
