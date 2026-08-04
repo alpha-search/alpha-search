@@ -123,3 +123,6 @@ reports/demo/*.sqlite*
 
 # Local scratch / extracted reference frames (not a deliverable)
 scratch/
+
+# session scratch/working dir
+scratchpad/
