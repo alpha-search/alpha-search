@@ -1,0 +1,5 @@
+# Regenerable data cache (synthetic here; real bars on a machine with Yahoo access)
+data/*.parquet
+data/*.csv
+# keep provenance so the data source is always recorded
+!data/_provenance.json

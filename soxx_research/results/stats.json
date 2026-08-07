@@ -1,0 +1,60 @@
+{
+  "data_source": {
+    "5m_60d": "SYNTHETIC",
+    "5m": "SYNTHETIC",
+    "5m_60d_fetched_utc": "2026-08-07T01:52:26.964938",
+    "1m_7d": "SYNTHETIC",
+    "1m": "SYNTHETIC",
+    "1m_7d_fetched_utc": "2026-08-07T01:52:29.205986"
+  },
+  "n_configurations": 30,
+  "n_sessions": 44,
+  "n_bars": 3432,
+  "train_test_cut": "2026-07-20",
+  "winner_by_oos_sharpe": "gap_fade_h6",
+  "winner_sharpe_is": 0.06540368324847902,
+  "winner_sharpe_oos": 10.701439611460135,
+  "winner_sharpe_full": 3.7000610865314973,
+  "deflated_sharpe": {
+    "sr_annual": 3.7000610865314973,
+    "sr0_annual": 12.362524737432006,
+    "expected_max_sharpe_from_luck": 12.362524737432006,
+    "deflated_sharpe_prob": 0.00010478395736021929,
+    "n_trials": 30,
+    "skew": 2.0651938838159727,
+    "kurtosis": 44.402865404220364,
+    "T": 3432
+  },
+  "permutation_full": {
+    "actual_sharpe": 4.972513146276116,
+    "null_mean": -0.08714260508280562,
+    "null_p95": 3.907570096413995,
+    "percentile": 98.0,
+    "p_value": 0.02
+  },
+  "permutation_oos": {
+    "actual_sharpe": 11.930684126744136,
+    "null_mean": -0.03758346563266641,
+    "null_p95": 6.961804591216571,
+    "percentile": 99.6,
+    "p_value": 0.004
+  },
+  "n_survivors_oos_positive": 4,
+  "survivors": [
+    "gap_fade_h6",
+    "tod_first_hour_L",
+    "tod_last_hour_S",
+    "tsmom_n24"
+  ],
+  "n_died_from_costs_alone": 6,
+  "died_from_costs": [
+    "gap_fade_h3",
+    "volregime_high_l12",
+    "tsmom_n12",
+    "volregime_low_l6",
+    "tod_lunch_S",
+    "boll_w20_k2.0"
+  ],
+  "best_oos_sharpe": 10.701439611460135,
+  "median_oos_sharpe": -3.954280566234672
+}
